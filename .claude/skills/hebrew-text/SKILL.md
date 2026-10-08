@@ -38,7 +38,7 @@ feminine ending to a word. Also forbidden: writing both forms side by side to av
 
 ## Check before finishing
 
-`test/hebrew-text.test.ts` scans `src/` and `web/` and fails on any slash, dot, middle-dot,
+`test/hebrew-text.test.ts` scans `src/` and fails on any slash, dot, middle-dot,
 or parenthesis form between Hebrew letters. Run `npm test` after editing Hebrew text. If
 the test flags a legitimate non-gendered use, rewrite the text rather than weakening the
 test.

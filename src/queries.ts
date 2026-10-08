@@ -1,0 +1,63 @@
+/** Reads for the two interfaces. Every write lives in gifts.ts and sync.ts. */
+import { pool } from "./db.ts";
+import { counterDrift, unitsHeldByNonMembers } from "./gifts.ts";
+
+export type StudentView = {
+  national_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  faculty: string | null;
+  campus: string | null;
+  member: boolean | null;
+  member_changed_at: Date | null;
+  gift_id: number | null;
+  gift_name: string | null;
+  gift_taken_at: Date | null;
+  interactions: { at: string; type: string; gift_id?: number }[];
+};
+
+export async function findStudent(nationalId: string): Promise<StudentView | null> {
+  const r = await pool.query(
+    `SELECT s.national_id, s.first_name, s.last_name, s.faculty, s.campus, s.member,
+            s.member_changed_at, s.gift_id, g.name AS gift_name, s.gift_taken_at,
+            s.interactions
+       FROM students s LEFT JOIN gifts g ON g.id = s.gift_id
+      WHERE s.national_id = $1`,
+    [nationalId],
+  );
+  return r.rows[0] ?? null;
+}
+
+export type GiftView = {
+  id: number;
+  name: string;
+  description: string;
+  starting_inventory: number;
+  requested_count: number;
+  given_count: number;
+  /** How many more students may select it. Plan §4.2. */
+  selectable: number;
+  /** Units still physically in the box. Plan §4.2. */
+  in_box: number;
+};
+
+export async function listGifts(): Promise<GiftView[]> {
+  const r = await pool.query(
+    `SELECT id, name, description, starting_inventory, requested_count, given_count,
+            starting_inventory - requested_count AS selectable,
+            starting_inventory - given_count     AS in_box
+       FROM gifts ORDER BY id`,
+  );
+  return r.rows;
+}
+
+export type StaffStats = {
+  gifts: GiftView[];
+  held: { gift_id: number; held: number }[];
+  drift: Awaited<ReturnType<typeof counterDrift>>;
+};
+
+export async function staffStats(): Promise<StaffStats> {
+  const [gifts, held, drift] = await Promise.all([listGifts(), unitsHeldByNonMembers(), counterDrift()]);
+  return { gifts, held, drift };
+}

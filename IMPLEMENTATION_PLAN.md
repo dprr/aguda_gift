@@ -32,7 +32,7 @@ the later section is wrong.
 |---|---|---|
 | Language | TypeScript, backend and frontend | One language for the whole system. The frontend is TypeScript either way |
 | Backend | Fastify | `app.inject()` tests concurrency in-process |
-| Frontend | React + Vite | No server rendering needed. Both interfaces sit behind login |
+| Frontend | **Server-rendered HTML. No React, no Vite, no build step** | The screens are a list of four gifts and one search box. React would add a build, a second `package.json`, a JSON API, and a second copy of the page logic (§0) |
 | Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are two tables. An ORM would earn nothing (§0) |
 | Database | PostgreSQL on RDS | Same price as a container once the instance is sized honestly, and it adds point-in-time recovery |
 | **Tables** | **2: `students` and `gifts`** | §0. Everything else serves no line in §14 |
@@ -100,8 +100,8 @@ entry point.
 
 ## 3. Repository layout
 
-One package for the backend. The frontend gets its own `package.json` in M4, because Vite
-needs its own toolchain. No workspaces and no monorepo tooling (§0).
+One package, for everything. The pages are server-rendered HTML, so there is no frontend
+toolchain. No workspaces and no monorepo tooling (§0).
 
 Node runs TypeScript files directly, and `node --test` runs the tests. So there is no build
 step for the backend, and no test framework to install.
@@ -114,9 +114,11 @@ aguda/
     gifts.ts    # §5.1 and §5.2
     sync.ts     # §5.3
     source.ts   # StudentSource and FakeSource
-    api/        # Fastify, M3
+    queries.ts  # reads for the two pages
+    auth.ts     # §2: the hd decision and Google
+    pages.ts    # every page, and every Hebrew string in one object
+    server.ts   # Fastify routes, sessions, CSRF
   test/
-  web/          # React + Vite, Hebrew RTL, M4
   docker-compose.yml   # local PostgreSQL only
 ```
 
@@ -464,8 +466,11 @@ students, and raise it as the roster grows. If that proves too weak, the fix is 
 
 ## 6. Authorization
 
-A session is a signed `HttpOnly`, `Secure`, `SameSite=Lax` cookie, with CSRF protection
-on every mutation.
+A session is a signed `HttpOnly`, `Secure`, `SameSite=Lax` cookie. CSRF protection has two
+layers: a browser does not send a `SameSite=Lax` cookie with a POST from another site, and
+the server refuses any POST whose `Origin` header names another origin. The second layer
+covers a sibling subdomain, which `SameSite` treats as the same site. Pages that show a
+student send `Cache-Control: no-store`, for shared desk computers.
 
 - The session holds `kind` of `student` or `staff`, and the email.
 - The server writes `kind` from the `hd` claim. No request can change it.
@@ -485,8 +490,10 @@ from the specification.
 - CSS **logical** properties only: `margin-inline-start`, `padding-inline`. Never
   `margin-left`.
 - ⚠️ **Isolate every number inside Hebrew text.** National IDs and timestamps render in
-  the wrong order otherwise. Use one `<Ltr>` component that sets `dir="ltr"` and
-  `unicode-bidi: isolate`. A staff member misreading an ID is a real distribution error.
+  the wrong order otherwise. Wrap them in `<bdi dir="ltr">`, through the `ltr()` helper in
+  `pages.ts`. A staff member misreading an ID is a real distribution error.
+- ⚠️ **No gendered new-speak.** Masculine is the neutral form. `.claude/skills/hebrew-text`
+  holds the rule, and `test/hebrew-text.test.ts` enforces it.
 - Keep all strings in one module, so a later English pass needs no component hunting.
 - A system Hebrew font stack. Ship no webfonts.
 
@@ -524,9 +531,11 @@ gift out twice.
 
 **M3 — Login.** One page, Google, the `hd` routing, sessions, rate limits.
 
-**M4 — The two interfaces.** Hebrew right-to-left shell. Student: log in, see membership,
-select one of four gifts, see a sold-out gift greyed out, see the locked selection.
-Staff: search by national ID, see the gift and the status, mark it as taken.
+**M4 — The two interfaces.** Server-rendered Hebrew right-to-left pages. Student: log in,
+see membership, select one of four gifts through a confirm step, see a sold-out gift greyed
+out, see the locked selection. Staff: search by national ID through a POST, see the gift
+and the status, mark it as taken, see the stock, the units held by lapsed members, and any
+counter drift.
 
 **M5 — AWS.** RDS, the EC2 instance, Caddy with Let's Encrypt, deployment, and a restore
 test.
@@ -589,7 +598,7 @@ Verify in the AWS calculator before committing.
 | A national ID reaches an access log | Never put it in a URL path or query string. Staff lookup is a `POST` with the ID in the body. Redact the field in the Fastify logger |
 | Stale local data refuses an eligible student | Show `member_changed_at` beside the status, so staff see how old that student's data is |
 | A 23,000-student sync is slow | Load the response into a temporary table and compare with set-based SQL. Measure at full scale on fake data in M1 |
-| RTL number rendering misleads staff | One `<Ltr>` component for every identifier. Review on a real device |
+| RTL number rendering misleads staff | The `ltr()` helper wraps every identifier and number. Review on a real device |
 
 ---
 

@@ -1,0 +1,227 @@
+// M4: the student page and the staff page, driven through real HTTP requests.
+import assert from "node:assert/strict";
+import { after, beforeEach, describe, test } from "node:test";
+import type { GoogleLogin } from "../src/auth.ts";
+import { pool } from "../src/db.ts";
+import { markTaken, selectGift } from "../src/gifts.ts";
+import { buildApp } from "../src/server.ts";
+import { freshDatabase, gift, loadStudents, setMember, student } from "./helpers.ts";
+
+after(() => pool.end());
+
+const ORIGIN = "http://localhost:3000";
+const noGoogle: GoogleLogin = {
+  start: async () => { throw new Error("not used"); },
+  finish: async () => { throw new Error("not used"); },
+};
+type App = Awaited<ReturnType<typeof buildApp>>;
+let app: App;
+
+const form = (body: Record<string, string>) => ({
+  payload: new URLSearchParams(body).toString(),
+  headers: { "content-type": "application/x-www-form-urlencoded" },
+});
+
+/** Log in through the development login and return the session cookie. */
+async function login(body: Record<string, string>): Promise<{ session: string }> {
+  const res = await app.inject({ method: "POST", url: "/auth/dev", ...form(body) });
+  const session = res.cookies.find((c) => c.name === "session")?.value;
+  assert.ok(session, `login failed: ${res.headers.location}`);
+  return { session };
+}
+const asStudent = (id: string) => login({ kind: "student", national_id: id });
+const asStaff = () => login({ kind: "staff", email: "dana@aguda.org" });
+
+let ids: string[];
+beforeEach(async () => {
+  await freshDatabase(5);
+  ids = await loadStudents(10, 8); // students 0-7 are members, 8-9 are not
+  app = await buildApp({
+    google: noGoogle,
+    sessionSecret: "test-secret-test-secret-test-secret",
+    domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org"] },
+    devLogin: true,
+    production: false,
+    origin: ORIGIN,
+  });
+});
+
+const count = (html: string, needle: string) => html.split(needle).length - 1;
+
+// ---- student ---------------------------------------------------------------------------
+
+describe("student page", () => {
+  test("a member with no selection sees the four gifts", async () => {
+    const res = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
+    assert.equal(res.statusCode, 200);
+    assert.equal(count(res.body, 'href="/student/confirm?gift='), 4);
+    assert.equal(res.headers["cache-control"], "no-store");
+  });
+
+  test("a sold-out gift is shown but cannot be chosen (request 19)", async () => {
+    await pool.query("UPDATE gifts SET requested_count = starting_inventory WHERE id = 2");
+    const res = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
+    assert.equal(count(res.body, 'href="/student/confirm?gift='), 3);
+    assert.doesNotMatch(res.body, /confirm\?gift=2"/);
+    assert.match(res.body, /class="gift out"/);
+  });
+
+  test("choosing takes a confirm step, then the selection is locked (request 3)", async () => {
+    const cookies = await asStudent(ids[0]);
+    const confirm = await app.inject({ url: "/student/confirm?gift=3", cookies });
+    assert.match(confirm.body, /action="\/student\/select"/);
+    assert.match(confirm.body, /name="gift_id" value="3"/);
+
+    const post = await app.inject({ method: "POST", url: "/student/select", cookies, ...form({ gift_id: "3" }) });
+    assert.equal(post.headers.location, "/student?saved=1");
+
+    const page = await app.inject({ url: "/student", cookies });
+    assert.equal(count(page.body, "/student/confirm?gift="), 0, "no gift can be chosen any more");
+    assert.match(page.body, /תיק בד/);
+    assert.equal((await student(ids[0])).gift_id, 3);
+  });
+
+  test("a gift that sells out between the page and the click is explained", async () => {
+    const cookies = await asStudent(ids[0]);
+    await pool.query("UPDATE gifts SET requested_count = starting_inventory WHERE id = 1");
+    const post = await app.inject({ method: "POST", url: "/student/select", cookies, ...form({ gift_id: "1" }) });
+    assert.equal(post.headers.location, "/student?error=sold_out");
+    const page = await app.inject({ url: post.headers.location as string, cookies });
+    assert.match(page.body, /אזלה הרגע/);
+    assert.equal(count(page.body, "/student/confirm?gift="), 3, "the student can pick another");
+  });
+
+  test("a non-member and an unknown member see no gifts", async () => {
+    await setMember(ids[1], null);
+    for (const id of [ids[9], ids[1]]) {
+      const res = await app.inject({ url: "/student", cookies: await asStudent(id) });
+      assert.equal(count(res.body, "/student/confirm?gift="), 0);
+      assert.match(res.body, /class="warn"/);
+    }
+  });
+
+  test("a lapsed member with a selection is told to renew (request 20)", async () => {
+    await selectGift(ids[0], 2);
+    await setMember(ids[0], false);
+    const res = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
+    assert.match(res.body, /לחדש את החברות/);
+  });
+
+  test("a collected gift is shown as received", async () => {
+    await selectGift(ids[0], 4);
+    await markTaken(ids[0]);
+    const res = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
+    assert.match(res.body, /קיבלת את המתנה/);
+  });
+
+  test("a student can only act for itself: a national ID in the request is ignored", async () => {
+    const cookies = await asStudent(ids[0]);
+    await app.inject({ method: "POST", url: "/student/select", cookies, ...form({ gift_id: "1", national_id: ids[1] }) });
+    assert.equal((await student(ids[0])).gift_id, 1);
+    assert.equal((await student(ids[1])).gift_id, null);
+  });
+});
+
+// ---- staff -----------------------------------------------------------------------------
+
+describe("staff page", () => {
+  test("search finds a student by national ID, by POST", async () => {
+    await selectGift(ids[0], 2);
+    const cookies = await asStaff();
+    const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: ` ${ids[0]} ` }) });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /ספל/);
+    assert.match(res.body, /action="\/staff\/take"/);
+    assert.equal(res.headers["cache-control"], "no-store");
+  });
+
+  test("an unknown ID says so", async () => {
+    const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies: await asStaff(), ...form({ national_id: "999" }) });
+    assert.match(res.body, /לא נמצא סטודנט/);
+  });
+
+  test("marking as taken works once; the second desk is told, and nothing is counted twice", async () => {
+    await selectGift(ids[0], 2);
+    const cookies = await asStaff();
+    const first = await app.inject({ method: "POST", url: "/staff/take", cookies, ...form({ national_id: ids[0] }) });
+    assert.match(first.body, /class="ok"/);
+    assert.doesNotMatch(first.body, /action="\/staff\/take"/, "no button after the handout");
+
+    const second = await app.inject({ method: "POST", url: "/staff/take", cookies, ...form({ national_id: ids[0] }) });
+    assert.match(second.body, /לפני רגע/, "a repeat within two minutes is treated as a lost response");
+    assert.equal((await gift(2)).given_count, 1);
+  });
+
+  test("an old repeat is an alarm, not a reassurance", async () => {
+    await selectGift(ids[0], 2);
+    await markTaken(ids[0]);
+    await pool.query("UPDATE students SET gift_taken_at = now() - interval '1 hour' WHERE national_id = $1", [ids[0]]);
+    const res = await app.inject({ method: "POST", url: "/staff/take", cookies: await asStaff(), ...form({ national_id: ids[0] }) });
+    assert.match(res.body, /אין למסור אותה שוב/);
+  });
+
+  test("no button for a student with no selection, or for a lapsed member (requests 6, 20)", async () => {
+    await selectGift(ids[1], 3);
+    await setMember(ids[1], false);
+    const cookies = await asStaff();
+    for (const id of [ids[0], ids[1]]) {
+      const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: id }) });
+      assert.doesNotMatch(res.body, /action="\/staff\/take"/);
+    }
+    // And a forced POST is still refused by the server.
+    const forced = await app.inject({ method: "POST", url: "/staff/take", cookies, ...form({ national_id: ids[1] }) });
+    assert.match(forced.body, /אין למסור את המתנה/);
+    assert.equal((await gift(3)).given_count, 0);
+  });
+
+  test("the stock table and the units held by non-members are shown", async () => {
+    await selectGift(ids[0], 1);
+    await selectGift(ids[1], 1);
+    await setMember(ids[1], false);
+    const res = await app.inject({ url: "/staff", cookies: await asStaff() });
+    assert.match(res.body, /<table>/);
+    assert.match(res.body, /קפוצ&#39;ון: <bdi dir="ltr">1<\/bdi>/, "one unit held by a lapsed member");
+  });
+
+  test("counter drift is shown as an error", async () => {
+    await pool.query("UPDATE gifts SET given_count = 3 WHERE id = 4");
+    const res = await app.inject({ url: "/staff", cookies: await asStaff() });
+    assert.match(res.body, /המונים אינם תואמים/);
+  });
+
+  test("a national ID never appears in a staff URL", async () => {
+    const cookies = await asStaff();
+    const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: ids[0] }) });
+    assert.equal(res.headers.location, undefined, "search answers with a page, not a redirect");
+    for (const m of res.body.matchAll(/(?:href|action)="([^"]*)"/g)) {
+      assert.ok(!m[1].includes(ids[0]), `national ID in ${m[1]}`);
+    }
+  });
+});
+
+// ---- cross-site requests ---------------------------------------------------------------
+
+describe("CSRF", () => {
+  test("a POST from another origin is refused", async () => {
+    await selectGift(ids[0], 2);
+    const cookies = await asStaff();
+    const res = await app.inject({
+      method: "POST", url: "/staff/take", cookies,
+      ...form({ national_id: ids[0] }),
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.aguda.org" },
+    });
+    assert.equal(res.statusCode, 403);
+    assert.equal((await gift(2)).given_count, 0);
+  });
+
+  test("a POST from this origin is accepted", async () => {
+    await selectGift(ids[0], 2);
+    const res = await app.inject({
+      method: "POST", url: "/staff/take", cookies: await asStaff(),
+      ...form({ national_id: ids[0] }),
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal((await gift(2)).given_count, 1);
+  });
+});

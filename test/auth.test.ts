@@ -63,6 +63,7 @@ async function app(result: Claims | Error, extra: { devLogin?: boolean; authRate
     domains,
     devLogin: extra.devLogin ?? false,
     production: false,
+    origin: "http://localhost:3000",
     authRateLimit: extra.authRateLimit,
   });
   return { app: a, seen };
@@ -226,7 +227,7 @@ describe("login flow", () => {
   test("the development login refuses to start in production", async () => {
     const { google } = stubGoogle({});
     await assert.rejects(
-      buildApp({ google, sessionSecret: "x".repeat(32), domains, devLogin: true, production: true }),
+      buildApp({ google, sessionSecret: "x".repeat(32), domains, devLogin: true, production: true, origin: "https://gifts.aguda.org" }),
       /DEV_LOGIN must be off in production/,
     );
   });

@@ -5,7 +5,9 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
-import { loginPage, type RefusalReason, staffPlaceholder, studentPlaceholder, T } from "./pages.ts";
+import { markTaken, selectGift } from "./gifts.ts";
+import { confirmPage, esc, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, T, when } from "./pages.ts";
+import { findStudent, listGifts, staffStats } from "./queries.ts";
 
 export type Session = { kind: "student"; nationalId: string } | { kind: "staff"; email: string };
 
@@ -15,6 +17,8 @@ export type AppOptions = {
   domains: Domains;
   devLogin: boolean;
   production: boolean;
+  /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
+  origin: string;
   /** Requests per minute per IP on every /auth route (plan §2). */
   authRateLimit?: number;
 };
@@ -36,6 +40,20 @@ export async function buildApp(options: AppOptions) {
   await app.register(cookie, { secret: options.sessionSecret });
   await app.register(formbody);
   await app.register(rateLimit, { global: false });
+
+  // CSRF. The session cookie is SameSite=Lax, so a browser does not send it with a POST
+  // from another site. This also refuses a POST whose Origin header names another site,
+  // which covers sibling subdomains that SameSite treats as the same site.
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.method !== "POST") return;
+    const origin = request.headers.origin;
+    if (origin !== undefined && origin !== options.origin) {
+      return reply.code(403).send("Forbidden");
+    }
+  });
+
+  // Pages that show a student must not stay in a shared desk computer's cache.
+  const noStore = (reply: FastifyReply) => reply.header("cache-control", "no-store");
 
   const authLimit = {
     config: { rateLimit: { max: options.authRateLimit ?? 30, timeWindow: "1 minute" } },
@@ -172,7 +190,7 @@ export async function buildApp(options: AppOptions) {
     return reply.redirect("/");
   });
 
-  // ---- the two interfaces. M4 replaces the placeholders -------------------------------
+  // ---- the two interfaces ------------------------------------------------------------
 
   /** Plan §6: a student route refuses a staff session, and the reverse. 403, not 404. */
   function requireKind(kind: Session["kind"]) {
@@ -183,26 +201,104 @@ export async function buildApp(options: AppOptions) {
       (request as FastifyRequest & { session: Session }).session = session;
     };
   }
+  const sessionOf = (request: FastifyRequest) => (request as FastifyRequest & { session: Session }).session;
+  const studentId = (request: FastifyRequest) => {
+    const s = sessionOf(request);
+    return s.kind === "student" ? s.nationalId : "";
+  };
+  const staffEmail = (request: FastifyRequest) => {
+    const s = sessionOf(request);
+    return s.kind === "staff" ? s.email : "";
+  };
+  const html = (reply: FastifyReply, body: string) => noStore(reply).type("text/html").send(body);
 
-  app.get("/student", { preHandler: requireKind("student") }, async (request, reply) => {
-    const session = (request as FastifyRequest & { session: Session }).session;
-    if (session.kind !== "student") return;
-    const r = await pool.query(
-      "SELECT national_id, first_name, last_name, member FROM students WHERE national_id = $1",
-      [session.nationalId],
-    );
-    if (r.rowCount === 0) {
-      reply.clearCookie(SESSION_COOKIE, { path: "/" });
-      return reply.redirect("/");
-    }
-    return reply.type("text/html").send(studentPlaceholder(r.rows[0]));
-  });
+  // ---- student ------------------------------------------------------------------------
+  // Every student route acts on the session's own national ID, never on one from the
+  // request (plan §6: a student reads and writes only its own row).
+
+  app.get<{ Querystring: { saved?: string; error?: string } }>(
+    "/student",
+    { preHandler: requireKind("student") },
+    async (request, reply) => {
+      const s = await findStudent(studentId(request));
+      if (!s) {
+        reply.clearCookie(SESSION_COOKIE, { path: "/" });
+        return reply.redirect("/");
+      }
+      const { saved, error } = request.query;
+      let message: Notice | undefined;
+      if (saved) message = { kind: "ok", text: T.student.saved };
+      else if (error && error in T.student.errors) {
+        message = { kind: "error", text: T.student.errors[error as StudentError] };
+      }
+      return html(reply, studentPage(s, await listGifts(), message));
+    },
+  );
+
+  app.get<{ Querystring: { gift?: string } }>(
+    "/student/confirm",
+    { preHandler: requireKind("student") },
+    async (request, reply) => {
+      const gift = (await listGifts()).find((g) => g.id === Number(request.query.gift));
+      if (!gift) return reply.redirect("/student?error=unknown_gift");
+      return html(reply, confirmPage(gift));
+    },
+  );
+
+  app.post<{ Body: { gift_id?: string } }>(
+    "/student/select",
+    { preHandler: requireKind("student") },
+    async (request, reply) => {
+      const result = await selectGift(studentId(request), Number(request.body?.gift_id));
+      return reply.redirect(result.ok ? "/student?saved=1" : `/student?error=${result.reason}`);
+    },
+  );
+
+  // ---- staff --------------------------------------------------------------------------
+  // The national ID always travels in a POST body, so it never enters a URL, a browser
+  // history, or an access log (plan §12). So search answers with a page, not a redirect.
 
   app.get("/staff", { preHandler: requireKind("staff") }, async (request, reply) => {
-    const session = (request as FastifyRequest & { session: Session }).session;
-    if (session.kind !== "staff") return;
-    return reply.type("text/html").send(staffPlaceholder(session.email));
+    return html(reply, staffPage({ email: staffEmail(request), stats: await staffStats() }));
   });
+
+  app.post<{ Body: { national_id?: string } }>(
+    "/staff/lookup",
+    { preHandler: requireKind("staff") },
+    async (request, reply) => {
+      const id = (request.body?.national_id ?? "").trim();
+      const student = id ? await findStudent(id) : null;
+      return html(reply, staffPage({ email: staffEmail(request), stats: await staffStats(), student, searched: id !== "" }));
+    },
+  );
+
+  app.post<{ Body: { national_id?: string } }>(
+    "/staff/take",
+    { preHandler: requireKind("staff") },
+    async (request, reply) => {
+      const id = (request.body?.national_id ?? "").trim();
+      const result = await markTaken(id);
+      const student = await findStudent(id);
+
+      let message: Notice;
+      if (result.ok) {
+        message = { kind: "ok", text: `${T.staff.given} ${esc(student?.gift_name)}` };
+      } else if (result.reason === "already_taken") {
+        // Under two minutes old: almost certainly this desk's own click, on poor wifi.
+        const recent = Date.now() - new Date(result.takenAt).getTime() < 2 * 60_000;
+        message = recent
+          ? { kind: "warn", text: T.staff.alreadyRecent }
+          : { kind: "error", text: `${T.staff.alreadyOld} ${when(result.takenAt)}. ${T.staff.alreadyOldEnd}` };
+      } else if (result.reason === "not_member") {
+        message = { kind: "error", text: T.staff.lapsed };
+      } else if (result.reason === "no_selection") {
+        message = { kind: "warn", text: T.staff.noSelection };
+      } else {
+        message = { kind: "error", text: T.staff.notFound };
+      }
+      return html(reply, staffPage({ email: staffEmail(request), stats: await staffStats(), student, searched: true, message }));
+    },
+  );
 
   return app;
 }
@@ -229,6 +325,7 @@ if (import.meta.main) {
     domains: { student: list("STUDENT_DOMAINS", "mail.huji.ac.il"), staff: list("STAFF_DOMAINS", "aguda.org") },
     devLogin: process.env.DEV_LOGIN === "1",
     production: process.env.NODE_ENV === "production",
+    origin: new URL(baseUrl).origin,
   });
 
   const port = Number(process.env.PORT ?? 3000);

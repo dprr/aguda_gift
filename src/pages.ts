@@ -1,8 +1,10 @@
 /**
- * Server-rendered pages for M3: the login page, its errors, and two placeholders that M4
- * replaces. Every Hebrew string lives in `T`, so a later English pass edits one object
- * (plan §7).
+ * Server-rendered pages: the login page, the student page, and the staff page. No React
+ * and no build step (plan §0 over §1). Every Hebrew string lives in `T`, so a later
+ * English pass edits one object (plan §7). Masculine is the neutral form: see
+ * .claude/skills/hebrew-text.
  */
+import type { GiftView, StaffStats, StudentView } from "./queries.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -22,10 +24,64 @@ export const T = {
     cancelled: "ההתחברות בוטלה.",
     google_error: "Google לא השלים את ההתחברות. נא לנסות שוב.",
   },
-  studentPlaceholder: "אזור הסטודנט ייבנה באבן הדרך M4.",
-  staffPlaceholder: "אזור הצוות ייבנה באבן הדרך M4.",
   member: { true: "חבר אגודה", false: "לא חבר אגודה", null: "סטטוס חברות לא ידוע" },
+
+  student: {
+    notMember: "לפי רשימת האוניברסיטה, אינך חבר אגודה. רק חברי אגודה יכולים לבחור מתנה.",
+    unknownMember: "אין לנו מידע על החברות שלך באגודה. נא לפנות למשרד האגודה.",
+    choose: "בחירת מתנה",
+    chooseHint: "אפשר לבחור מתנה אחת בלבד. הבחירה סופית.",
+    select: "בחירה",
+    soldOut: "אזל",
+    left: "נותרו",
+    confirmTitle: "אישור הבחירה",
+    confirmFinal: "אחרי האישור אי אפשר לשנות את הבחירה.",
+    confirm: "אישור הבחירה",
+    back: "חזרה",
+    yourGift: "המתנה שלך",
+    collectHint: "אפשר לאסוף את המתנה בעמדת חלוקה של האגודה. יש להביא תעודת סטודנט.",
+    received: "קיבלת את המתנה",
+    lapsed: "החברות שלך באגודה אינה פעילה כרגע. כדי לקבל את המתנה יש לחדש את החברות.",
+    saved: "הבחירה נשמרה.",
+    errors: {
+      sold_out: "המתנה שבחרת אזלה הרגע. אפשר לבחור מתנה אחרת.",
+      already_selected: "כבר בחרת מתנה. הבחירה סופית.",
+      not_member: "רק חברי אגודה יכולים לבחור מתנה.",
+      unknown_gift: "המתנה לא נמצאה.",
+      unknown_student: "לא מצאנו אותך ברשימת האוניברסיטה.",
+    },
+  },
+
+  staff: {
+    title: "עמדת חלוקה",
+    search: "חיפוש סטודנט",
+    nationalId: "מספר זהות",
+    find: "חיפוש",
+    notFound: "לא נמצא סטודנט עם מספר הזהות הזה.",
+    membership: "חברות באגודה",
+    updated: "מעודכן ל־",
+    gift: "מתנה שנבחרה",
+    noSelection: "לא נבחרה מתנה. אין למסור מתנה.",
+    status: "מצב",
+    takenAt: "נמסרה ב־",
+    notTaken: "טרם נמסרה",
+    markTaken: "סימון המתנה כנמסרה",
+    lapsed: "הסטודנט אינו חבר אגודה כרגע. אין למסור את המתנה.",
+    given: "המתנה נמסרה:",
+    alreadyRecent: "המתנה סומנה כנמסרה לפני רגע. כנראה הלחיצה הקודמת הצליחה. אין צורך לעשות דבר.",
+    alreadyOld: "המתנה כבר נמסרה ב־",
+    alreadyOldEnd: "אין למסור אותה שוב.",
+    history: "היסטוריה",
+    collected: "קבלת מתנה:",
+    stock: "מלאי",
+    stockCols: ["מתנה", "מלאי התחלתי", "נבחרו", "נמסרו", "פנויות לבחירה", "במלאי בפועל"],
+    held: "מתנות שמוחזקות עבור סטודנטים שאינם חברי אגודה",
+    heldNone: "אין.",
+    drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. יש לדווח למפתח.",
+  },
 } as const;
+
+export type StudentError = keyof typeof T.student.errors;
 
 export type RefusalReason = keyof typeof T.refused;
 
@@ -42,7 +98,7 @@ export function esc(value: unknown): string {
 /** Plan §7: isolate numbers and addresses inside Hebrew text, or they render reversed. */
 const ltr = (value: unknown) => `<bdi dir="ltr">${esc(value)}</bdi>`;
 
-function layout(body: string): string {
+function layout(body: string, wide = false): string {
   return `<!doctype html>
 <html lang="he" dir="rtl">
 <head>
@@ -65,9 +121,34 @@ function layout(body: string): string {
   legend { color: #c33; font-weight: 600; }
   input { font: inherit; padding: 0.5rem; width: 100%; box-sizing: border-box;
           margin-block: 0.3rem 0.6rem; }
+  main.wide { max-width: 46rem; }
+  .ok { background: #e9f5ee; color: #1f5f3f; border-radius: 8px; padding: 0.8rem;
+        font-weight: 600; }
+  .warn { background: #fdf3e5; color: #8a4b00; border-radius: 8px; padding: 0.8rem;
+          font-weight: 600; }
+  .gifts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+           gap: 0.75rem; }
+  .gift { border: 2px solid #d6d8de; border-radius: 10px; padding: 0.9rem;
+          display: flex; flex-direction: column; gap: 0.4rem; }
+  .gift.out { opacity: 0.5; }
+  .gift strong { font-size: 1.1rem; }
+  .big { font-size: 1.5rem; font-weight: 700; margin: 0.3rem 0; }
+  .button.disabled { background: #9aa0a6; cursor: default; }
+  .button.secondary { background: #fff; color: #1b1b1f; border: 1px solid #d6d8de;
+                      margin-block-start: 0.5rem; }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .bar form .button { width: auto; padding: 0.4rem 0.9rem; }
+  .card { border: 1px solid #d6d8de; border-radius: 10px; padding: 1rem;
+          margin-block: 1rem; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; }
+  dt { color: #5f6470; }
+  dd { margin: 0; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { border-block-end: 1px solid #e3e5ea; padding: 0.4rem; text-align: start; }
+  section { margin-block-start: 1.5rem; }
 </style>
 </head>
-<body><main>${body}</main></body>
+<body><main${wide ? ' class="wide"' : ""}>${body}</main></body>
 </html>`;
 }
 
@@ -92,24 +173,157 @@ ${error}
 ${dev}`);
 }
 
-const logoutForm = `<form method="post" action="/auth/logout"><button class="button">${T.logout}</button></form>`;
+const logoutForm = `<form method="post" action="/auth/logout"><button class="button secondary">${T.logout}</button></form>`;
 
-export function studentPlaceholder(s: {
-  first_name: string | null;
-  last_name: string | null;
-  national_id: string;
-  member: boolean | null;
-}): string {
-  return layout(`<h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>
-<p>${ltr(s.national_id)}</p>
-<p><strong>${T.member[String(s.member) as "true" | "false" | "null"]}</strong></p>
-<p class="hint">${T.studentPlaceholder}</p>
-${logoutForm}`);
+const clock = new Intl.DateTimeFormat("he-IL", {
+  timeZone: "Asia/Jerusalem", // plan §4: store UTC, display local time
+  dateStyle: "short",
+  timeStyle: "short",
+});
+/** A timestamp as local Jerusalem time, isolated left-to-right inside Hebrew text. */
+export const when = (value: Date | string | null) => (value ? ltr(clock.format(new Date(value))) : "");
+
+const memberLabel = (member: boolean | null) =>
+  T.member[String(member) as "true" | "false" | "null"];
+
+// ---- student ---------------------------------------------------------------------------
+
+export type Notice = { kind: "ok" | "error" | "warn"; text: string };
+const notice = (n?: Notice) => (n ? `<p class="${n.kind}">${n.text}</p>` : "");
+
+export function studentPage(s: StudentView, gifts: GiftView[], message?: Notice): string {
+  const head = `<div class="bar"><h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>${logoutForm}</div>
+<p>${ltr(s.national_id)} · <strong>${memberLabel(s.member)}</strong></p>
+${notice(message)}`;
+
+  // Collected: nothing more to do.
+  if (s.gift_taken_at) {
+    return layout(`${head}
+<div class="card"><p>${T.student.received}</p><p class="big">${esc(s.gift_name)}</p>
+<p class="hint">${when(s.gift_taken_at)}</p></div>`);
+  }
+
+  // Selected, not collected. A lapsed member keeps the unit, but must renew (request 20).
+  if (s.gift_id !== null) {
+    const lapsed = s.member !== true ? `<p class="warn">${T.student.lapsed}</p>` : "";
+    return layout(`${head}
+<div class="card"><p>${T.student.yourGift}</p><p class="big">${esc(s.gift_name)}</p>
+<p class="hint">${T.student.chooseHint}</p>${lapsed}
+<p>${T.student.collectHint}</p></div>`);
+  }
+
+  // No selection, and not a member: nothing to choose.
+  if (s.member !== true) {
+    const text = s.member === null ? T.student.unknownMember : T.student.notMember;
+    return layout(`${head}<p class="warn">${text}</p>`);
+  }
+
+  // A member with no selection: the four gifts. A sold-out gift cannot be chosen (request 19).
+  const cards = gifts
+    .map((g) =>
+      g.selectable > 0
+        ? `<div class="gift"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
+<a class="button" href="/student/confirm?gift=${g.id}">${T.student.select}</a></div>`
+        : `<div class="gift out"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
+<span class="button disabled" aria-disabled="true">${T.student.soldOut}</span></div>`,
+    )
+    .join("\n");
+  return layout(`${head}
+<h2>${T.student.choose}</h2>
+<p class="hint">${T.student.chooseHint}</p>
+<div class="gifts">${cards}</div>`);
 }
 
-export function staffPlaceholder(email: string): string {
-  return layout(`<h1>${T.title}</h1>
-<p>${ltr(email)}</p>
-<p class="hint">${T.staffPlaceholder}</p>
-${logoutForm}`);
+/** The selection is final (request 3), so it takes a second, explicit step. */
+export function confirmPage(gift: GiftView): string {
+  return layout(`<h1>${T.student.confirmTitle}</h1>
+<p class="big">${esc(gift.name)}</p>
+<p class="warn">${T.student.confirmFinal}</p>
+<form method="post" action="/student/select">
+  <input type="hidden" name="gift_id" value="${gift.id}">
+  <button class="button">${T.student.confirm}</button>
+</form>
+<a class="button secondary" href="/student">${T.student.back}</a>`);
+}
+
+// ---- staff -----------------------------------------------------------------------------
+
+function studentCard(s: StudentView, giftNames: Map<number, string>): string {
+  let action = "";
+  if (s.gift_id === null) action = `<p class="warn">${T.staff.noSelection}</p>`;
+  else if (s.gift_taken_at) action = "";
+  else if (s.member !== true) action = `<p class="error">${T.staff.lapsed}</p>`;
+  else {
+    // The national ID travels in the POST body, never in a URL (plan §12).
+    action = `<form method="post" action="/staff/take">
+  <input type="hidden" name="national_id" value="${esc(s.national_id)}">
+  <button class="button">${T.staff.markTaken}</button>
+</form>`;
+  }
+
+  const history = s.interactions.length
+    ? `<h3>${T.staff.history}</h3><ul>${s.interactions
+        .map((i) => `<li>${when(i.at)} ${T.staff.collected} ${esc(giftNames.get(i.gift_id!) ?? i.gift_id)}</li>`)
+        .join("")}</ul>`
+    : "";
+
+  return `<div class="card">
+<h2>${esc(s.first_name)} ${esc(s.last_name)}</h2>
+<dl>
+  <dt>${T.staff.nationalId}</dt><dd>${ltr(s.national_id)}</dd>
+  <dt>${T.staff.membership}</dt><dd>${memberLabel(s.member)} <span class="hint">${T.staff.updated} ${when(s.member_changed_at)}</span></dd>
+  <dt>${T.staff.gift}</dt><dd>${s.gift_name ? esc(s.gift_name) : "—"}</dd>
+  <dt>${T.staff.status}</dt><dd>${s.gift_taken_at ? `${T.staff.takenAt} ${when(s.gift_taken_at)}` : T.staff.notTaken}</dd>
+</dl>
+${action}
+${history}
+</div>`;
+}
+
+export function staffPage(options: {
+  email: string;
+  stats: StaffStats;
+  student?: StudentView | null;
+  searched?: boolean;
+  message?: Notice;
+}): string {
+  const { email, stats, student, searched, message } = options;
+  const giftNames = new Map(stats.gifts.map((g) => [g.id, g.name]));
+
+  const result = student
+    ? studentCard(student, giftNames)
+    : searched
+      ? `<p class="error">${T.staff.notFound}</p>`
+      : "";
+
+  const rows = stats.gifts
+    .map(
+      (g) =>
+        `<tr><td>${esc(g.name)}</td>${[g.starting_inventory, g.requested_count, g.given_count, g.selectable, g.in_box]
+          .map((n) => `<td>${ltr(n)}</td>`)
+          .join("")}</tr>`,
+    )
+    .join("");
+
+  const held = stats.held.length
+    ? `<ul>${stats.held.map((h) => `<li>${esc(giftNames.get(h.gift_id))}: ${ltr(h.held)}</li>`).join("")}</ul>`
+    : `<p class="hint">${T.staff.heldNone}</p>`;
+
+  const drift = stats.drift.length ? `<p class="error">${T.staff.drift}</p>` : "";
+
+  return layout(
+    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm}</div>
+${drift}
+<form method="post" action="/staff/lookup">
+  <label>${T.staff.search}<input name="national_id" dir="ltr" inputmode="numeric" autofocus autocomplete="off"></label>
+  <button class="button">${T.staff.find}</button>
+</form>
+${notice(message)}
+${result}
+<section><h2>${T.staff.stock}</h2>
+<table><thead><tr>${T.staff.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+</section>
+<section><h2>${T.staff.held}</h2>${held}</section>`,
+    true,
+  );
 }
