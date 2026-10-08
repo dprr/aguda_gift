@@ -13,7 +13,8 @@
     "seed": "node src/seed.ts",
     "pretest": "node test/create-db.ts",
     "test": "DATABASE_URL=postgres://aguda:localdev@127.0.0.1:5433/aguda_test node --test --test-concurrency=1 'test/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed-demo": "node src/seed-demo.ts"
   },
   "dependencies": {
     "pg": "^8.13.1"
