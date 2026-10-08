@@ -6,8 +6,7 @@
 
 export const T = {
   title: "מתנות האגודה",
-  signIn: "התחברות עם Google",
-  signInHint: "סטודנטים: חשבון האוניברסיטה (mail.huji.ac.il). צוות: חשבון האגודה (aguda.org).",
+  signIn: "התחברות עם חשבון mail.huji.ac.il",
   logout: "התנתקות",
   tryAgain: "חזרה להתחברות",
   devTitle: "התחברות לפיתוח בלבד",
@@ -90,7 +89,6 @@ export function loginPage(options: { devLogin: boolean; error?: RefusalReason })
   return layout(`<h1>${T.title}</h1>
 ${error}
 <a class="button" href="/auth/google">${T.signIn}</a>
-<p class="hint">${T.signInHint}</p>
 ${dev}`);
 }
 
