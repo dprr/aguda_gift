@@ -4,3 +4,4 @@ dist/
 *.tsbuildinfo
 .idea/
 .DS_Store
+secret.txt
