@@ -117,16 +117,3 @@ export async function counterDrift(): Promise<
     HAVING g.given_count <> count(s.national_id)`);
   return result.rows;
 }
-
-/**
- * Request 20. Students who selected a gift, have not collected it, and are no longer
- * members. Each one holds a unit of stock that nobody else can select.
- */
-export async function unitsHeldByNonMembers(): Promise<{ gift_id: number; held: number }[]> {
-  const result = await pool.query(`
-    SELECT gift_id, count(*)::int AS held
-      FROM students
-     WHERE gift_id IS NOT NULL AND gift_taken_at IS NULL AND member IS NOT TRUE
-     GROUP BY gift_id ORDER BY gift_id`);
-  return result.rows;
-}

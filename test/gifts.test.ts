@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import { pool } from "../src/db.ts";
-import { counterDrift, markTaken, selectGift, unitsHeldByNonMembers } from "../src/gifts.ts";
+import { counterDrift, markTaken, selectGift } from "../src/gifts.ts";
 import { freshDatabase, gift, loadStudents, setMember, student } from "./helpers.ts";
 
 beforeEach(() => freshDatabase());
@@ -132,12 +132,11 @@ test("a lapsed member is refused at the desk, and the unit stays held (request 2
   assert.equal((await student(id)).gift_id, 1);
   assert.equal((await gift(1)).requested_count, 1);
   assert.equal((await gift(1)).given_count, 0);
-  assert.deepEqual(await unitsHeldByNonMembers(), [{ gift_id: 1, held: 1 }]);
 
   // Renewing lets the student collect the held unit.
   await setMember(id, true);
   assert.equal((await markTaken(id)).ok, true);
-  assert.deepEqual(await unitsHeldByNonMembers(), []);
+  assert.equal((await gift(1)).given_count, 1);
 });
 
 test("CONCURRENCY: 8 desks mark the same student at once; exactly one wins (request 8)", async () => {

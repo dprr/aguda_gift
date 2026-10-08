@@ -1,6 +1,6 @@
 /** Reads for the two interfaces. Every write lives in gifts.ts and sync.ts. */
 import { pool } from "./db.ts";
-import { counterDrift, unitsHeldByNonMembers } from "./gifts.ts";
+import { counterDrift } from "./gifts.ts";
 
 export type StudentView = {
   national_id: string;
@@ -54,11 +54,10 @@ export async function listGifts(): Promise<GiftView[]> {
 
 export type StaffStats = {
   gifts: GiftView[];
-  held: { gift_id: number; held: number }[];
   drift: Awaited<ReturnType<typeof counterDrift>>;
 };
 
 export async function staffStats(): Promise<StaffStats> {
-  const [gifts, held, drift] = await Promise.all([listGifts(), unitsHeldByNonMembers(), counterDrift()]);
-  return { gifts, held, drift };
+  const [gifts, drift] = await Promise.all([listGifts(), counterDrift()]);
+  return { gifts, drift };
 }

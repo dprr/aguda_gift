@@ -174,13 +174,11 @@ describe("staff page", () => {
     assert.equal((await gift(3)).given_count, 0);
   });
 
-  test("the stock table and the units held by non-members are shown", async () => {
+  test("the stock table shows each gift's counts", async () => {
     await selectGift(ids[0], 1);
     await selectGift(ids[1], 1);
-    await setMember(ids[1], false);
     const res = await app.inject({ url: "/staff", cookies: await asStaff() });
-    assert.match(res.body, /<table>/);
-    assert.match(res.body, /קפוצ&#39;ון: <bdi dir="ltr">1<\/bdi>/, "one unit held by a lapsed member");
+    assert.match(res.body, /<td>קפוצ&#39;ון<\/td><td><bdi dir="ltr">5<\/bdi><\/td><td><bdi dir="ltr">2<\/bdi><\/td>/);
   });
 
   test("counter drift is shown as an error", async () => {

@@ -78,8 +78,6 @@ export const T = {
     collected: "קבלת מתנה:",
     stock: "מלאי",
     stockCols: ["מתנה", "מלאי התחלתי", "נבחרו", "נמסרו", "פנויות לבחירה", "במלאי בפועל"],
-    held: "מתנות שמוחזקות עבור סטודנטים שאינם חברי אגודה",
-    heldNone: "אין.",
     drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. יש לדווח למפתח.",
   },
 } as const;
@@ -324,10 +322,6 @@ export function staffPage(options: {
     )
     .join("");
 
-  const held = stats.held.length
-    ? `<ul>${stats.held.map((h) => `<li>${esc(giftNames.get(h.gift_id))}: ${ltr(h.held)}</li>`).join("")}</ul>`
-    : `<p class="hint">${T.staff.heldNone}</p>`;
-
   const drift = stats.drift.length ? `<p class="error">${T.staff.drift}</p>` : "";
 
   return layout(
@@ -341,8 +335,7 @@ ${notice(message)}
 ${result}
 <section><h2>${T.staff.stock}</h2>
 <table><thead><tr>${T.staff.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
-</section>
-<section><h2>${T.staff.held}</h2>${held}</section>`,
+</section>`,
     true,
   );
 }

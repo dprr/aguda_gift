@@ -423,7 +423,6 @@ wifi, so say so rather than raising an alarm.
 
 ⚠️ **A lapsed member's unit is never released.** The owner chose this. If the student does
 not renew, `requested_count` keeps that unit forever and no other student can select it.
-The staff screen must show these students, so Aguda can see how much stock they hold.
 §13 records the release path.
 
 ### 5.3 Apply a synchronization
@@ -534,7 +533,7 @@ gift out twice.
 **M4 — The two interfaces.** Server-rendered Hebrew right-to-left pages. Student: log in,
 see membership, select one of four gifts through a confirm step, see a sold-out gift greyed
 out, see the locked selection. Staff: search by national ID through a POST, see the gift
-and the status, mark it as taken, see the stock, the units held by lapsed members, and any
+and the status, mark it as taken, see the stock, and any
 counter drift.
 
 **M5 — AWS.** RDS, the EC2 instance, Caddy with Let's Encrypt, deployment, and a restore
