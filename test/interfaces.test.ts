@@ -225,3 +225,46 @@ describe("CSRF", () => {
     assert.equal((await gift(2)).given_count, 1);
   });
 });
+
+// ---- gender (.claude/skills/hebrew-text) ------------------------------------------------
+// A known woman gets the feminine form. Masculine is the neutral form only when the gender
+// is unknown.
+
+describe("gendered forms", () => {
+  const setGender = (id: string, gender: string | null) =>
+    pool.query("UPDATE students SET gender = $2 WHERE national_id = $1", [id, gender]);
+
+  test("isFemale recognises the known codes, and treats anything else as unknown", async () => {
+    const { isFemale } = await import("../src/pages.ts");
+    for (const g of ["נקבה", "F", " female "]) assert.equal(isFemale(g), true, g);
+    for (const g of ["זכר", "M", "1", "", null]) assert.equal(isFemale(g), false, String(g));
+  });
+
+  test("the membership label follows the stored gender", async () => {
+    await setGender(ids[0], "נקבה");
+    await setGender(ids[1], "זכר");
+    await setGender(ids[2], null);
+    const page = async (id: string) => (await app.inject({ url: "/student", cookies: await asStudent(id) })).body;
+    assert.match(await page(ids[0]), /<strong>חברת אגודה<\/strong>/);
+    assert.match(await page(ids[1]), /<strong>חבר אגודה<\/strong>/);
+    assert.match(await page(ids[2]), /<strong>חבר אגודה<\/strong>/, "unknown gender is masculine");
+  });
+
+  test("a female non-member is told אינך חברת אגודה", async () => {
+    await setGender(ids[9], "נקבה");
+    const res = await app.inject({ url: "/student", cookies: await asStudent(ids[9]) });
+    assert.match(res.body, /אינך חברת אגודה/);
+  });
+
+  test("the staff card and the refusal use the student's gender", async () => {
+    await selectGift(ids[0], 1);
+    await setMember(ids[0], false);
+    await setGender(ids[0], "נקבה");
+    const cookies = await asStaff();
+    const card = await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: ids[0] }) });
+    assert.match(card.body, /לא חברת אגודה/);
+    assert.match(card.body, /הסטודנטית אינה חברת אגודה/);
+    const forced = await app.inject({ method: "POST", url: "/staff/take", cookies, ...form({ national_id: ids[0] }) });
+    assert.match(forced.body, /הסטודנטית אינה חברת אגודה/);
+  });
+});

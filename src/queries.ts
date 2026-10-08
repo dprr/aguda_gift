@@ -6,6 +6,7 @@ export type StudentView = {
   national_id: string;
   first_name: string | null;
   last_name: string | null;
+  gender: string | null;
   faculty: string | null;
   campus: string | null;
   member: boolean | null;
@@ -18,7 +19,7 @@ export type StudentView = {
 
 export async function findStudent(nationalId: string): Promise<StudentView | null> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.faculty, s.campus, s.member,
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.faculty, s.campus, s.member,
             s.member_changed_at, s.gift_id, g.name AS gift_name, s.gift_taken_at,
             s.interactions
        FROM students s LEFT JOIN gifts g ON g.id = s.gift_id

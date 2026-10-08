@@ -56,8 +56,9 @@ export const PROFILE_COLUMNS = [
 // ---------------------------------------------------------------------------------------
 // FakeSource
 
-const FIRST = ["נועה", "איתי", "מאיה", "יונתן", "שירה", "עומר", "תמר", "דניאל", "יעל", "אורי",
-  "רוני", "אביגיל", "נדב", "הילה", "עידו", "מיכל", "אלון", "ליאור", "שני", "גיא"];
+// Names that clearly match the gender, so the demo never shows a woman named גיא.
+const FIRST_MALE = ["איתי", "יונתן", "עומר", "דניאל", "אורי", "נדב", "עידו", "אלון", "גיא", "אביתר"];
+const FIRST_FEMALE = ["נועה", "מאיה", "שירה", "תמר", "יעל", "אביגיל", "הילה", "מיכל", "שני", "רותם"];
 const LAST = ["כהן", "לוי", "מזרחי", "פרץ", "ביטון", "אברהם", "פרידמן", "אזולאי", "דהן",
   "שפירא", "גולן", "רוזן", "בן דוד", "אוחיון", "קליין"];
 const FACULTIES = [
@@ -102,12 +103,14 @@ export function fakeStudents(count: number, seed = 1): SourceStudent[] {
     const year = 1 + Math.floor(rand() * 4);
     const roll = rand();
 
+    const female = rand() < 0.5;
+
     students.push({
       national_id: nationalId,
       university_email: `student${i}@mail.huji.ac.il`,
-      first_name: pick(FIRST),
+      first_name: pick(female ? FIRST_FEMALE : FIRST_MALE),
       last_name: pick(LAST),
-      gender: rand() < 0.5 ? "נקבה" : "זכר",
+      gender: female ? "נקבה" : "זכר",
       phone: `05${Math.floor(rand() * 1e8).toString().padStart(8, "0")}`,
       faculty: f.faculty,
       parent_faculty: f.faculty,

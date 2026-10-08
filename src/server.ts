@@ -6,7 +6,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
 import { markTaken, selectGift } from "./gifts.ts";
-import { confirmPage, esc, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, T, when } from "./pages.ts";
+import { confirmPage, esc, lapsedText, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 
 export type Session = { kind: "student"; nationalId: string } | { kind: "staff"; email: string };
@@ -290,7 +290,7 @@ export async function buildApp(options: AppOptions) {
           ? { kind: "warn", text: T.staff.alreadyRecent }
           : { kind: "error", text: `${T.staff.alreadyOld} ${when(result.takenAt)}. ${T.staff.alreadyOldEnd}` };
       } else if (result.reason === "not_member") {
-        message = { kind: "error", text: T.staff.lapsed };
+        message = { kind: "error", text: lapsedText(student?.gender ?? null) };
       } else if (result.reason === "no_selection") {
         message = { kind: "warn", text: T.staff.noSelection };
       } else {

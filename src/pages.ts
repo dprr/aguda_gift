@@ -25,9 +25,11 @@ export const T = {
     google_error: "Google לא השלים את ההתחברות. נא לנסות שוב.",
   },
   member: { true: "חבר אגודה", false: "לא חבר אגודה", null: "סטטוס חברות לא ידוע" },
+  memberFemale: { true: "חברת אגודה", false: "לא חברת אגודה", null: "סטטוס חברות לא ידוע" },
 
   student: {
     notMember: "לפי רשימת האוניברסיטה, אינך חבר אגודה. רק חברי אגודה יכולים לבחור מתנה.",
+    notMemberFemale: "לפי רשימת האוניברסיטה, אינך חברת אגודה. רק חברי אגודה יכולים לבחור מתנה.",
     unknownMember: "אין לנו מידע על החברות שלך באגודה. נא לפנות למשרד האגודה.",
     choose: "בחירת מתנה",
     chooseHint: "אפשר לבחור מתנה אחת בלבד. הבחירה סופית.",
@@ -67,6 +69,7 @@ export const T = {
     notTaken: "טרם נמסרה",
     markTaken: "סימון המתנה כנמסרה",
     lapsed: "הסטודנט אינו חבר אגודה כרגע. אין למסור את המתנה.",
+    lapsedFemale: "הסטודנטית אינה חברת אגודה כרגע. אין למסור את המתנה.",
     given: "המתנה נמסרה:",
     alreadyRecent: "המתנה סומנה כנמסרה לפני רגע. כנראה הלחיצה הקודמת הצליחה. אין צורך לעשות דבר.",
     alreadyOld: "המתנה כבר נמסרה ב־",
@@ -183,8 +186,21 @@ const clock = new Intl.DateTimeFormat("he-IL", {
 /** A timestamp as local Jerusalem time, isolated left-to-right inside Hebrew text. */
 export const when = (value: Date | string | null) => (value ? ltr(clock.format(new Date(value))) : "");
 
-const memberLabel = (member: boolean | null) =>
-  T.member[String(member) as "true" | "false" | "null"];
+/**
+ * The skill's rule: a known woman gets the feminine form. Masculine is the neutral form
+ * only when the gender is unknown. The university's gender codes are unconfirmed (§4.2), so
+ * any value not listed here falls back to the masculine.
+ */
+const FEMALE = new Set(["נקבה", "f", "female"]);
+export const isFemale = (gender: string | null) =>
+  gender !== null && FEMALE.has(gender.trim().toLowerCase());
+
+const memberLabel = (member: boolean | null, gender: string | null) =>
+  (isFemale(gender) ? T.memberFemale : T.member)[String(member) as "true" | "false" | "null"];
+
+/** Staff: this student is not a member now, so do not hand the gift over. */
+export const lapsedText = (gender: string | null) =>
+  isFemale(gender) ? T.staff.lapsedFemale : T.staff.lapsed;
 
 // ---- student ---------------------------------------------------------------------------
 
@@ -193,7 +209,7 @@ const notice = (n?: Notice) => (n ? `<p class="${n.kind}">${n.text}</p>` : "");
 
 export function studentPage(s: StudentView, gifts: GiftView[], message?: Notice): string {
   const head = `<div class="bar"><h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>${logoutForm}</div>
-<p>${ltr(s.national_id)} · <strong>${memberLabel(s.member)}</strong></p>
+<p>${ltr(s.national_id)} · <strong>${memberLabel(s.member, s.gender)}</strong></p>
 ${notice(message)}`;
 
   // Collected: nothing more to do.
@@ -214,7 +230,10 @@ ${notice(message)}`;
 
   // No selection, and not a member: nothing to choose.
   if (s.member !== true) {
-    const text = s.member === null ? T.student.unknownMember : T.student.notMember;
+    const text =
+      s.member === null
+        ? T.student.unknownMember
+        : isFemale(s.gender) ? T.student.notMemberFemale : T.student.notMember;
     return layout(`${head}<p class="warn">${text}</p>`);
   }
 
@@ -252,7 +271,7 @@ function studentCard(s: StudentView, giftNames: Map<number, string>): string {
   let action = "";
   if (s.gift_id === null) action = `<p class="warn">${T.staff.noSelection}</p>`;
   else if (s.gift_taken_at) action = "";
-  else if (s.member !== true) action = `<p class="error">${T.staff.lapsed}</p>`;
+  else if (s.member !== true) action = `<p class="error">${lapsedText(s.gender)}</p>`;
   else {
     // The national ID travels in the POST body, never in a URL (plan §12).
     action = `<form method="post" action="/staff/take">
@@ -271,7 +290,7 @@ function studentCard(s: StudentView, giftNames: Map<number, string>): string {
 <h2>${esc(s.first_name)} ${esc(s.last_name)}</h2>
 <dl>
   <dt>${T.staff.nationalId}</dt><dd>${ltr(s.national_id)}</dd>
-  <dt>${T.staff.membership}</dt><dd>${memberLabel(s.member)} <span class="hint">${T.staff.updated} ${when(s.member_changed_at)}</span></dd>
+  <dt>${T.staff.membership}</dt><dd>${memberLabel(s.member, s.gender)} <span class="hint">${T.staff.updated} ${when(s.member_changed_at)}</span></dd>
   <dt>${T.staff.gift}</dt><dd>${s.gift_name ? esc(s.gift_name) : "—"}</dd>
   <dt>${T.staff.status}</dt><dd>${s.gift_taken_at ? `${T.staff.takenAt} ${when(s.gift_taken_at)}` : T.staff.notTaken}</dd>
 </dl>

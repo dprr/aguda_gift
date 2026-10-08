@@ -582,6 +582,7 @@ Verify in the AWS calculator before committing.
 | **Network connection** | Choose IP allowlisting, or confirm the Rumba VPN runs unattended. Allowlisting is strongly preferred |
 | **Membership source** | How does the university response represent Aguda membership? |
 | **Student count** | Confirm the roster size. This plan assumes about 23,000 |
+| **Gender codes** | What values does the university send for מגדר? `isFemale()` recognises `נקבה`, `F`, and `female`. Any other value shows the masculine, so an unrecognised code silently addresses every woman as a man |
 | **Data retention** | ⚠️ How long is national ID data kept, and who may read it? Settle this **before the first real import** |
 
 ---
@@ -673,6 +674,7 @@ document is a wish list, and a section in it is not a request.
 | 18 | `students` holds a list of interactions: gift collection now, merchandise and Kossel membership later |
 | 19 | A student cannot select a sold-out gift. The check belongs at selection, not at distribution |
 | 20 | A student must be a member at selection **and** at collection. A lapsed member is refused at the desk, and the unit stays held |
+| 21 | Hebrew text uses no gendered new-speak. Text about one known student follows `students.gender`; masculine only when the gender is unknown |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

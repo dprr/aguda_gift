@@ -33,8 +33,21 @@ feminine ending to a word. Also forbidden: writing both forms side by side to av
 - **The infinitive** is not gendered, so it needs no change: "נא לנסות שוב", "נא לפנות
   למשרד האגודה". Do not rewrite an infinitive into a masculine imperative just to apply
   this rule.
-- **A feminine form about a known woman** is correct Hebrew, not new-speak. Only the
-  generic, unknown-person case uses the masculine.
+- **A feminine form about a known woman** is correct Hebrew, not new-speak, and it is
+  **required**. Only the generic, unknown-person case uses the masculine.
+
+## When the text is about one known student
+
+The student page and the staff card show one specific student, and `students.gender` holds
+that student's gender. So these texts must follow it:
+
+- `isFemale(gender)` in `src/pages.ts` decides. A gender code it does not recognise counts
+  as unknown, which gives the masculine.
+- Write both forms in `T`, as a pair: `member` and `memberFemale`, `notMember` and
+  `notMemberFemale`. Never join them with a slash.
+- Text about students in general stays masculine plural: "רק חברי אגודה יכולים".
+- Many second-person verbs are spelled the same for both: בחרת, קיבלת, אינך. They need no
+  pair.
 
 ## Check before finishing
 
