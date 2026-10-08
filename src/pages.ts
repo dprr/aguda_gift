@@ -11,7 +11,7 @@ export const T = {
   logout: "התנתקות",
   tryAgain: "חזרה להתחברות",
   devTitle: "התחברות לפיתוח בלבד",
-  devStudent: "כניסה כסטודנט/ית, לפי מספר זהות",
+  devStudent: "כניסה כסטודנט, לפי מספר זהות",
   devStaff: "כניסה כצוות, לפי כתובת דוא\"ל",
   devGo: "כניסה",
   refused: {
@@ -23,9 +23,9 @@ export const T = {
     cancelled: "ההתחברות בוטלה.",
     google_error: "Google לא השלים את ההתחברות. נא לנסות שוב.",
   },
-  studentPlaceholder: "אזור הסטודנט/ית ייבנה באבן הדרך M4.",
+  studentPlaceholder: "אזור הסטודנט ייבנה באבן הדרך M4.",
   staffPlaceholder: "אזור הצוות ייבנה באבן הדרך M4.",
-  member: { true: "חבר/ת אגודה", false: "לא חבר/ת אגודה", null: "סטטוס חברות לא ידוע" },
+  member: { true: "חבר אגודה", false: "לא חבר אגודה", null: "סטטוס חברות לא ידוע" },
 } as const;
 
 export type RefusalReason = keyof typeof T.refused;
