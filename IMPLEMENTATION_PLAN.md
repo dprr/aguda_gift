@@ -91,11 +91,6 @@ consequence of §14 holding no request for staff accounts or roles. See §13.
    list. Ask at the Aguda office." The cause is a new student, or a student who left.
 2. An `aguda.org` address. There is no failure case, which is the point in §13.
 
-### Rate limiting
-
-One rule: a per-IP limit on the login start and callback routes. That is the only public
-entry point.
-
 ---
 
 ## 3. Repository layout
@@ -528,7 +523,7 @@ membership-history append, and failed-import safety.
 two students cannot claim the last unit of a gift, and two centers cannot hand the same
 gift out twice.
 
-**M3 — Login.** One page, Google, the `hd` routing, sessions, rate limits.
+**M3 — Login.** One page, Google, the `hd` routing, sessions.
 
 **M4 — The two interfaces.** Server-rendered Hebrew right-to-left pages. Student: log in,
 see membership, select one of four gifts through a confirm step, see a sold-out gift greyed

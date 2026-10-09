@@ -55,7 +55,7 @@ function stubGoogle(result: Claims | Error) {
   return { google, seen };
 }
 
-async function app(result: Claims | Error, extra: { devLogin?: boolean; authRateLimit?: number } = {}) {
+async function app(result: Claims | Error, extra: { devLogin?: boolean } = {}) {
   const { google, seen } = stubGoogle(result);
   const a = await buildApp({
     google,
@@ -64,7 +64,6 @@ async function app(result: Claims | Error, extra: { devLogin?: boolean; authRate
     devLogin: extra.devLogin ?? false,
     production: false,
     origin: "http://localhost:3000",
-    authRateLimit: extra.authRateLimit,
   });
   return { app: a, seen };
 }
@@ -200,13 +199,6 @@ describe("login flow", () => {
     const res = await a.inject({ method: "POST", url: "/auth/logout" });
     const cleared = res.cookies.find((c) => c.name === "session")!;
     assert.equal(cleared.value, "");
-  });
-
-  test("the login routes are rate-limited per IP", async () => {
-    const { app: a } = await app({}, { authRateLimit: 5 });
-    const codes = [];
-    for (let i = 0; i < 7; i++) codes.push((await a.inject("/auth/google")).statusCode);
-    assert.deepEqual(codes, [302, 302, 302, 302, 302, 429, 429]);
   });
 
   test("the development login works only when enabled", async () => {

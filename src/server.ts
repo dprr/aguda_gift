@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
-import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
@@ -21,8 +20,6 @@ export type AppOptions = {
   production: boolean;
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
   origin: string;
-  /** Requests per minute per IP on every /auth route (plan §2). */
-  authRateLimit?: number;
 };
 
 const SESSION_COOKIE = "session";
@@ -41,7 +38,6 @@ export async function buildApp(options: AppOptions) {
   });
   await app.register(cookie, { secret: options.sessionSecret });
   await app.register(formbody);
-  await app.register(rateLimit, { global: false });
 
   // CSRF. The session cookie is SameSite=Lax, so a browser does not send it with a POST
   // from another site. This also refuses a POST whose Origin header names another site,
@@ -56,10 +52,6 @@ export async function buildApp(options: AppOptions) {
 
   // Pages that show a student must not stay in a shared desk computer's cache.
   const noStore = (reply: FastifyReply) => reply.header("cache-control", "no-store");
-
-  const authLimit = {
-    config: { rateLimit: { max: options.authRateLimit ?? 30, timeWindow: "1 minute" } },
-  };
 
   const cookieBase = {
     httpOnly: true,
@@ -104,7 +96,7 @@ export async function buildApp(options: AppOptions) {
 
   // ---- Google -------------------------------------------------------------------------
 
-  app.get("/auth/google", authLimit, async (_request, reply) => {
+  app.get("/auth/google", async (_request, reply) => {
     const state = randomBytes(16).toString("base64url");
     const { url, codeVerifier } = await options.google.start(state);
     reply.setCookie(OAUTH_COOKIE, JSON.stringify({ state, codeVerifier }), {
@@ -116,7 +108,6 @@ export async function buildApp(options: AppOptions) {
 
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     "/auth/callback",
-    authLimit,
     async (request, reply) => {
       const raw = request.cookies[OAUTH_COOKIE];
       reply.clearCookie(OAUTH_COOKIE, { path: "/" });
@@ -166,7 +157,6 @@ export async function buildApp(options: AppOptions) {
   if (options.devLogin) {
     app.post<{ Body: { kind?: string; national_id?: string; email?: string } }>(
       "/auth/dev",
-      authLimit,
       async (request, reply) => {
         const { kind, national_id, email } = request.body ?? {};
         if (kind === "student" && national_id) {
