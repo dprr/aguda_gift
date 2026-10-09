@@ -7,17 +7,18 @@ import { freshDatabase, loadStudents, student } from "./helpers.ts";
 
 after(() => pool.end());
 
-const domains = { student: ["mail.huji.ac.il"], staff: ["aguda.org"] };
+const domains = { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] };
 
 // ---- the pure decision (plan §2) ------------------------------------------------------
 
 describe("decide", () => {
   const cases: [string, Claims, string][] = [
     ["HUJI → student", { email: "a@mail.huji.ac.il", email_verified: true, hd: "mail.huji.ac.il" }, "student"],
-    ["Aguda → staff", { email: "b@aguda.org", email_verified: true, hd: "aguda.org" }, "staff"],
+    ["Aguda → staff", { email: "b@aguda.org.il", email_verified: true, hd: "aguda.org.il" }, "staff"],
     ["personal Gmail has no hd → refused", { email: "c@gmail.com", email_verified: true }, "no_domain"],
     ["empty hd → refused", { email: "c@x.com", email_verified: true, hd: "" }, "no_domain"],
     ["other organization → refused", { email: "d@tau.ac.il", email_verified: true, hd: "tau.ac.il" }, "wrong_domain"],
+    ["the old domain aguda.org → refused", { email: "b@aguda.org", email_verified: true, hd: "aguda.org" }, "wrong_domain"],
     ["unverified email → refused", { email: "a@mail.huji.ac.il", email_verified: false, hd: "mail.huji.ac.il" }, "unverified_email"],
     ["missing email → refused", { email_verified: true, hd: "mail.huji.ac.il" }, "unverified_email"],
     ["upper-case hd still matches", { email: "a@mail.huji.ac.il", email_verified: true, hd: "MAIL.HUJI.AC.IL" }, "student"],
@@ -126,12 +127,12 @@ describe("login flow", () => {
   });
 
   test("an Aguda account gets a staff session", async () => {
-    const { app: a } = await app({ email: "dana@aguda.org", email_verified: true, hd: "aguda.org" });
+    const { app: a } = await app({ email: "dana@aguda.org.il", email_verified: true, hd: "aguda.org.il" });
     const res = await googleFlow(a);
     assert.equal(res.headers.location, "/staff");
     const page = await a.inject({ url: "/staff", cookies: { session: sessionOf(res)! } });
     assert.equal(page.statusCode, 200);
-    assert.ok(page.body.includes("dana@aguda.org"));
+    assert.ok(page.body.includes("dana@aguda.org.il"));
   });
 
   for (const [name, claims, reason] of [
@@ -148,7 +149,7 @@ describe("login flow", () => {
   }
 
   test("a wrong state, or a missing state cookie, is refused", async () => {
-    const claims = { email: "dana@aguda.org", email_verified: true, hd: "aguda.org" };
+    const claims = { email: "dana@aguda.org.il", email_verified: true, hd: "aguda.org.il" };
     for (const tweak of [{ state: "forged" }, { noCookie: true }]) {
       const { app: a } = await app(claims);
       const res = await googleFlow(a, tweak);
@@ -170,7 +171,7 @@ describe("login flow", () => {
     const studentCookie = sessionOf(await googleFlow(studentApp))!;
     assert.equal((await studentApp.inject({ url: "/staff", cookies: { session: studentCookie } })).statusCode, 403);
 
-    const { app: staffApp } = await app({ email: "dana@aguda.org", email_verified: true, hd: "aguda.org" });
+    const { app: staffApp } = await app({ email: "dana@aguda.org.il", email_verified: true, hd: "aguda.org.il" });
     const staffCookie = sessionOf(await googleFlow(staffApp))!;
     assert.equal((await staffApp.inject({ url: "/student", cookies: { session: staffCookie } })).statusCode, 403);
   });
@@ -184,8 +185,8 @@ describe("login flow", () => {
   });
 
   test("a hand-written or tampered session cookie is ignored", async () => {
-    const { app: a } = await app({ email: "dana@aguda.org", email_verified: true, hd: "aguda.org" });
-    const forged = JSON.stringify({ kind: "staff", email: "attacker@aguda.org" });
+    const { app: a } = await app({ email: "dana@aguda.org.il", email_verified: true, hd: "aguda.org.il" });
+    const forged = JSON.stringify({ kind: "staff", email: "attacker@aguda.org.il" });
     assert.equal((await a.inject({ url: "/staff", cookies: { session: forged } })).headers.location, "/");
 
     const real = sessionOf(await googleFlow(a))!;
@@ -194,7 +195,7 @@ describe("login flow", () => {
   });
 
   test("logout clears the session", async () => {
-    const { app: a } = await app({ email: "dana@aguda.org", email_verified: true, hd: "aguda.org" });
+    const { app: a } = await app({ email: "dana@aguda.org.il", email_verified: true, hd: "aguda.org.il" });
     await googleFlow(a);
     const res = await a.inject({ method: "POST", url: "/auth/logout" });
     const cleared = res.cookies.find((c) => c.name === "session")!;
@@ -219,7 +220,7 @@ describe("login flow", () => {
   test("the development login refuses to start in production", async () => {
     const { google } = stubGoogle({});
     await assert.rejects(
-      buildApp({ google, sessionSecret: "x".repeat(32), domains, devLogin: true, production: true, origin: "https://gifts.aguda.org" }),
+      buildApp({ google, sessionSecret: "x".repeat(32), domains, devLogin: true, production: true, origin: "https://gifts.aguda.org.il" }),
       /DEV_LOGIN must be off in production/,
     );
   });

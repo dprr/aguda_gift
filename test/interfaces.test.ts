@@ -30,7 +30,7 @@ async function login(body: Record<string, string>): Promise<{ session: string }>
   return { session };
 }
 const asStudent = (id: string) => login({ kind: "student", national_id: id });
-const asStaff = () => login({ kind: "staff", email: "dana@aguda.org" });
+const asStaff = () => login({ kind: "staff", email: "dana@aguda.org.il" });
 
 let ids: string[];
 beforeEach(async () => {
@@ -39,7 +39,7 @@ beforeEach(async () => {
   app = await buildApp({
     google: noGoogle,
     sessionSecret: "test-secret-test-secret-test-secret",
-    domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org"] },
+    domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
     devLogin: true,
     production: false,
     origin: ORIGIN,
@@ -206,7 +206,7 @@ describe("CSRF", () => {
     const res = await app.inject({
       method: "POST", url: "/staff/take", cookies,
       ...form({ national_id: ids[0] }),
-      headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.aguda.org" },
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.aguda.org.il" },
     });
     assert.equal(res.statusCode, 403);
     assert.equal((await gift(2)).given_count, 0);

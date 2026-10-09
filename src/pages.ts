@@ -166,7 +166,7 @@ export function loginPage(options: { devLogin: boolean; error?: RefusalReason })
     <button class="button" name="kind" value="student">${T.devGo}</button>
   </form>
   <form method="post" action="/auth/dev">
-    <label>${T.devStaff}<input name="email" dir="ltr" placeholder="dev@aguda.org"></label>
+    <label>${T.devStaff}<input name="email" dir="ltr" placeholder="dev@aguda.org.il"></label>
     <button class="button" name="kind" value="staff">${T.devGo}</button>
   </form>
 </fieldset>`

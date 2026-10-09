@@ -15,7 +15,7 @@ export type Decision =
   | { kind: "staff"; email: string }
   | { kind: "refused"; reason: "unverified_email" | "no_domain" | "wrong_domain" };
 
-/** Pure. Request 10: `mail.huji.ac.il` → student, `aguda.org` → staff, anything else → refused. */
+/** Pure. Request 10: `mail.huji.ac.il` → student, `aguda.org.il` → staff, anything else → refused. */
 export function decide(claims: Claims, domains: Domains): Decision {
   if (claims.email_verified !== true || !claims.email) {
     return { kind: "refused", reason: "unverified_email" };

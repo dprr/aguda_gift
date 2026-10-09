@@ -328,7 +328,7 @@ if (import.meta.main) {
       redirectUri: `${baseUrl}/auth/callback`,
     }),
     sessionSecret: env("SESSION_SECRET"),
-    domains: { student: list("STUDENT_DOMAINS", "mail.huji.ac.il"), staff: list("STAFF_DOMAINS", "aguda.org") },
+    domains: { student: list("STUDENT_DOMAINS", "mail.huji.ac.il"), staff: list("STAFF_DOMAINS", "aguda.org.il") },
     devLogin: process.env.DEV_LOGIN === "1",
     demo: process.env.DEMO === "1",
     production: process.env.NODE_ENV === "production",

@@ -55,7 +55,7 @@ the interface.
 | `hd` claim in the ID token | Result |
 |---|---|
 | `mail.huji.ac.il`, or another confirmed student domain | Student session |
-| `aguda.org` | Staff session |
+| `aguda.org.il` | Staff session |
 | Any other domain | Refuse |
 | **No `hd` claim** | Refuse |
 
@@ -82,14 +82,14 @@ and `students.university_email` matches it. The student never types a national I
 lowercases the Google address before the lookup. A university record with `Dana@Mail...`
 must not lock a student out.
 
-**A staff session needs no table.** Any `aguda.org` address is staff. This is a
+**A staff session needs no table.** Any `aguda.org.il` address is staff. This is a
 consequence of §14 holding no request for staff accounts or roles. See §13.
 
 ### Two failures the page must explain in clear Hebrew
 
 1. A HUJI address with no matching student. Say "We cannot find you in the university
    list. Ask at the Aguda office." The cause is a new student, or a student who left.
-2. An `aguda.org` address. There is no failure case, which is the point in §13.
+2. An `aguda.org.il` address. There is no failure case, which is the point in §13.
 
 ---
 
@@ -472,7 +472,7 @@ student send `Cache-Control: no-store`, for shared desk computers.
   session. Return 403.
 - A student session may read and write **only its own** row.
 
-⚠️ Any `aguda.org` address is staff, with full staff powers. §14 holds no request for
+⚠️ Any `aguda.org.il` address is staff, with full staff powers. §14 holds no request for
 roles or campus permissions. This is recorded in §13, and it is the largest difference
 from the specification.
 
@@ -587,7 +587,7 @@ Verify in the AWS calculator before committing.
 |---|---|
 | HUJI blocks third-party Google login | Ask in week 1. The fallback is a one-time code by email, which needs AWS SES and a production-access request |
 | The VBA script needs an interactive login | Keep `StudentSource` narrow. Everything else runs on `FakeSource`. M6 is independent |
-| Any `aguda.org` address is staff | Accepted. §14 holds no request for roles. Recorded in §13 |
+| Any `aguda.org.il` address is staff | Accepted. §14 holds no request for roles. Recorded in §13 |
 | A counter drifts from the student rows | Two reconciliation queries in §4.2, run in the test suite and shown on a staff screen |
 | Two students claim the last unit of a gift | §5.1 statement 2 is a compare-and-swap on the one `gifts` row. Exactly one succeeds. Threaded tests in M2 prove it |
 | A national ID reaches an access log | Never put it in a URL path or query string. Staff lookup is a `POST` with the ID in the body. Redact the field in the Fastify logger |
@@ -614,7 +614,7 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | Which employee handed a gift over | Not recorded. `gift_taken_at` holds only the time | A `given_by_email` column, written by the §5.2 statement |
 | §5.2 Stock per collection location | One counter per gift, across all centers | A `gift_inventory` table keyed by gift and location |
 | §7.2 Questionnaire | Not built at all | A `questionnaire_versions` table, and a third array on `students` for the answers |
-| §6.1, §6.2 Staff accounts and roles | Any `aguda.org` address is staff | A `staff_users` table with role and campus columns, and a campus check on every location-scoped route |
+| §6.1, §6.2 Staff accounts and roles | Any `aguda.org.il` address is staff | A `staff_users` table with role and campus columns, and a campus check on every location-scoped route |
 | §5.1 Collection locations | Not recorded. The handout stores only the time | `campuses` and `collection_locations` tables |
 | §3.2 Sync scheduling UI | The worker runs on a fixed interval | An administrator screen, and a schedule record |
 | §3.4 Sync run records | The worker logs. No table | A `sync_runs` table with counts and errors |
@@ -657,7 +657,7 @@ document is a wish list, and a section in it is not a request.
 | 7 | A gift selection never expires |
 | 8 | Several employees work at the same time, from separate distribution centers |
 | 9 | One identifier only: the national ID. HUJI uses it as the student number |
-| 10 | One login page. Google login. `mail.huji.ac.il` shows the student page, `aguda.org` shows the staff page |
+| 10 | One login page. Google login. `mail.huji.ac.il` shows the student page, `aguda.org.il` shows the staff page |
 | 11 | A periodic run copies the university student list into a local database |
 | 12 | Everything else reads the local database only |
 | 13 | A list of every time a student's membership changed, inside the student row |
