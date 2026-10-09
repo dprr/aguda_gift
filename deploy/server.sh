@@ -102,7 +102,10 @@ start_app() {
   [ -n "$(app_pid || true)" ] && return
   [ -f "$ENV_FILE" ] || { echo "missing $ENV_FILE"; exit 1; }
   mkdir -p "$LOGS"
-  (cd "$APP" && nohup "$NODE" --env-file="$ENV_FILE" src/server.ts >> "$LOGS/app.log" 2>&1 & echo $! > "$RUN/app.pid")
+  # No subshell: $! must be Node's own PID, or `stop` kills a shell and leaves Node running.
+  # stdin from /dev/null, so Node holds no file the SSH session waits on.
+  nohup "$NODE" --env-file="$ENV_FILE" "$APP/src/server.ts" >> "$LOGS/app.log" 2>&1 < /dev/null &
+  echo $! > "$RUN/app.pid"
   sleep 2
   [ -n "$(app_pid || true)" ] || { echo "the app did not start:"; tail -20 "$LOGS/app.log"; exit 1; }
   log "app started, pid $(cat "$RUN/app.pid")"
