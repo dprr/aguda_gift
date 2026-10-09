@@ -38,8 +38,10 @@ After every reboot of the server, run `start`.
 `.env` sets `DEMO=1`, `DEV_LOGIN=1`, and `SYNC_SOURCE=fake`. Every page shows a red banner,
 the data is invented, and anyone can log in as anyone. **Never put real data on it.**
 
-Google login there needs `https://aguda.felber.eu.org/auth/callback` among the client's
-authorized redirect URIs.
+Google login there uses its **own** OAuth client, `838804867749-8ih1…`, whose authorized
+redirect URI is `https://aguda.felber.eu.org/auth/callback`. The laptop's `.env` uses a
+different client, `115180069784-ibfi…`, for `http://localhost:3000`. Test users must be
+added to each client's project separately.
 
 ## The two changes outside the folder
 
