@@ -8,6 +8,8 @@ import { pool } from "./db.ts";
 import { markTaken, selectGift } from "./gifts.ts";
 import { confirmPage, esc, lapsedText, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
+import { startSyncSchedule } from "./schedule.ts";
+import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 
 export type Session = { kind: "student"; nationalId: string } | { kind: "staff"; email: string };
 
@@ -327,6 +329,38 @@ if (import.meta.main) {
     production: process.env.NODE_ENV === "production",
     origin: new URL(baseUrl).origin,
   });
+
+  // Request 11: the periodic sync. Off unless SYNC_SOURCE is set.
+  const syncSource = process.env.SYNC_SOURCE ?? "";
+  let source: StudentSource | null = null;
+  if (syncSource === "fake") {
+    // Fake students in a production database would be indistinguishable from real ones.
+    if (process.env.NODE_ENV === "production") throw new Error("SYNC_SOURCE=fake is refused in production");
+    source = new FakeSource(fakeStudents(Number(process.env.FAKE_STUDENTS ?? 2000)));
+  } else if (syncSource === "university") {
+    throw new Error("SYNC_SOURCE=university needs the VBA port, which is milestone M6");
+  } else if (syncSource !== "") {
+    throw new Error(`unknown SYNC_SOURCE: ${syncSource}`);
+  }
+  const schedule = source
+    ? startSyncSchedule({
+        source,
+        minStudents: Number(process.env.SYNC_MIN_STUDENTS ?? 20000),
+        intervalMs: Number(process.env.SYNC_INTERVAL_HOURS ?? 24) * 3_600_000,
+        log: (entry) => console.log(JSON.stringify({ sync: entry })),
+      })
+    : null;
+  if (!schedule) console.log("periodic sync is off (SYNC_SOURCE is empty)");
+
+  // Finish a sync in progress before exiting, so a deploy never cuts one in half.
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, async () => {
+      await schedule?.stop();
+      await app.close();
+      await pool.end();
+      process.exit(0);
+    });
+  }
 
   const port = Number(process.env.PORT ?? 3000);
   // Not HOST: many shells export HOST as the machine name, which resolves to every
