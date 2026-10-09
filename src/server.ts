@@ -5,7 +5,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
 import { markTaken, selectGift } from "./gifts.ts";
-import { confirmPage, esc, lapsedText, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, T, when } from "./pages.ts";
+import { confirmPage, demoBanner, esc, lapsedText, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
@@ -18,6 +18,11 @@ export type AppOptions = {
   domains: Domains;
   devLogin: boolean;
   production: boolean;
+  /**
+   * A public demonstration with invented data. Allows the development login and the fake
+   * source in production, and puts a banner on every page. Never set it with real data.
+   */
+  demo?: boolean;
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
   origin: string;
 };
@@ -27,7 +32,7 @@ const OAUTH_COOKIE = "oauth";
 const SESSION_HOURS = 12; // one desk shift
 
 export async function buildApp(options: AppOptions) {
-  if (options.production && options.devLogin) {
+  if (options.production && options.devLogin && !options.demo) {
     throw new Error("DEV_LOGIN must be off in production");
   }
 
@@ -49,6 +54,15 @@ export async function buildApp(options: AppOptions) {
       return reply.code(403).send("Forbidden");
     }
   });
+
+  // The demo banner goes into every HTML page, so no page can be mistaken for the real site.
+  if (options.demo) {
+    app.addHook("onSend", async (_request, reply, payload) => {
+      const type = String(reply.getHeader("content-type") ?? "");
+      if (!type.startsWith("text/html") || typeof payload !== "string") return payload;
+      return payload.replace("<body>", `<body>${demoBanner}`);
+    });
+  }
 
   // Pages that show a student must not stay in a shared desk computer's cache.
   const noStore = (reply: FastifyReply) => reply.header("cache-control", "no-store");
@@ -316,6 +330,7 @@ if (import.meta.main) {
     sessionSecret: env("SESSION_SECRET"),
     domains: { student: list("STUDENT_DOMAINS", "mail.huji.ac.il"), staff: list("STAFF_DOMAINS", "aguda.org") },
     devLogin: process.env.DEV_LOGIN === "1",
+    demo: process.env.DEMO === "1",
     production: process.env.NODE_ENV === "production",
     origin: new URL(baseUrl).origin,
   });
@@ -325,7 +340,9 @@ if (import.meta.main) {
   let source: StudentSource | null = null;
   if (syncSource === "fake") {
     // Fake students in a production database would be indistinguishable from real ones.
-    if (process.env.NODE_ENV === "production") throw new Error("SYNC_SOURCE=fake is refused in production");
+    if (process.env.NODE_ENV === "production" && process.env.DEMO !== "1") {
+      throw new Error("SYNC_SOURCE=fake is refused in production, unless DEMO=1");
+    }
     source = new FakeSource(fakeStudents(Number(process.env.FAKE_STUDENTS ?? 2000)));
   } else if (syncSource === "university") {
     throw new Error("SYNC_SOURCE=university needs the VBA port, which is milestone M6");

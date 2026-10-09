@@ -86,6 +86,9 @@ export type StudentError = keyof typeof T.student.errors;
 
 export type RefusalReason = keyof typeof T.refused;
 
+/** DEMO=1 only. Inline style, so it shows even if the page's own styles change. */
+export const demoBanner = `<div role="alert" style="background:#9c1f1f;color:#fff;font-weight:700;text-align:center;padding:0.7rem;margin:-2rem -1rem 1.5rem">${"גרסת הדגמה. כל הנתונים מומצאים, וכל אחד יכול להתחבר בתור כל משתמש. אין להזין מידע אמיתי."}</div>`;
+
 /** Escape text before it goes into HTML. */
 export function esc(value: unknown): string {
   return String(value ?? "")

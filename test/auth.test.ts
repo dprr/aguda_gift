@@ -224,3 +224,36 @@ describe("login flow", () => {
     );
   });
 });
+
+describe("demo mode", () => {
+  const demoApp = (demo: boolean, production: boolean) =>
+    buildApp({
+      google: stubGoogle({}).google,
+      sessionSecret: "x".repeat(32),
+      domains,
+      devLogin: true,
+      production,
+      demo,
+      origin: "https://aguda.felber.eu.org",
+    });
+
+  test("production refuses the development login, unless DEMO is set", async () => {
+    await assert.rejects(demoApp(false, true), /DEV_LOGIN must be off in production/);
+    await demoApp(true, true); // does not throw
+  });
+
+  test("demo mode puts the banner on every page; normal mode never does", async () => {
+    const demo = await demoApp(true, false);
+    const page = await demo.inject("/");
+    assert.match(page.body, /<body><div role="alert"[^>]*>גרסת הדגמה/);
+
+    const normal = await demoApp(false, false);
+    assert.doesNotMatch((await normal.inject("/")).body, /גרסת הדגמה/);
+  });
+
+  test("the banner does not touch responses that are not HTML", async () => {
+    const demo = await demoApp(true, false);
+    const redirect = await demo.inject("/student");
+    assert.doesNotMatch(redirect.body, /גרסת הדגמה/);
+  });
+});
