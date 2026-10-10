@@ -247,7 +247,8 @@ export async function buildApp(options: AppOptions) {
     async (request, reply) => {
       const gift = (await listGifts()).find((g) => g.id === Number(request.query.gift));
       if (!gift) return reply.redirect("/student?error=unknown_gift");
-      return html(reply, confirmPage(gift));
+      const s = await findStudent(studentId(request));
+      return html(reply, confirmPage(gift, s?.gender ?? null));
     },
   );
 

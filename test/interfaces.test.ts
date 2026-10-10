@@ -283,3 +283,54 @@ describe("logout button", () => {
     assert.equal(button((await app.inject({ url: "/staff", cookies: await asStaff() })).body), "התנתק");
   });
 });
+
+describe("buttons use the imperative (.claude/skills/hebrew-text)", () => {
+  const setGender = (id: string, gender: string | null) =>
+    pool.query("UPDATE students SET gender = $2 WHERE national_id = $1", [id, gender]);
+  /** The visible text of every <button> and every link styled as a button. */
+  const labels = (html: string) =>
+    [...html.matchAll(/<(?:button|a)[^>]*class="button[^"]*"[^>]*>([^<]+)</g)].map((m) => m[1].trim());
+
+  test("the login page", async () => {
+    const l = labels((await app.inject("/")).body);
+    assert.ok(l.includes("התחבר עם חשבון mail.huji.ac.il"), l.join(" | "));
+    assert.ok(l.includes("היכנס"), l.join(" | "));
+  });
+
+  test("the student pages, by gender", async () => {
+    await setGender(ids[0], "נקבה");
+    await setGender(ids[1], "זכר");
+    for (const [id, expected] of [
+      [ids[0], ["בחרי", "אשרי את הבחירה", "חזרי"]],
+      [ids[1], ["בחר", "אשר את הבחירה", "חזור"]],
+    ] as const) {
+      const cookies = await asStudent(id);
+      const gifts = labels((await app.inject({ url: "/student", cookies })).body);
+      const confirm = labels((await app.inject({ url: "/student/confirm?gift=1", cookies })).body);
+      assert.ok(gifts.includes(expected[0]), gifts.join(" | "));
+      assert.ok(confirm.includes(expected[1]) && confirm.includes(expected[2]), confirm.join(" | "));
+    }
+  });
+
+  test("the staff page", async () => {
+    await selectGift(ids[0], 1);
+    const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies: await asStaff(), ...form({ national_id: ids[0] }) });
+    const l = labels(res.body);
+    assert.ok(l.includes("חפש") && l.includes("סמן כנמסרה"), l.join(" | "));
+  });
+
+  test("no button anywhere is a verbal noun", async () => {
+    await selectGift(ids[2], 2);
+    const staff = await asStaff();
+    const pages = [
+      (await app.inject("/")).body,
+      (await app.inject({ url: "/student", cookies: await asStudent(ids[0]) })).body,
+      (await app.inject({ url: "/student/confirm?gift=1", cookies: await asStudent(ids[0]) })).body,
+      (await app.inject({ method: "POST", url: "/staff/lookup", cookies: staff, ...form({ national_id: ids[2] }) })).body,
+    ];
+    const nouns = ["התנתקות", "התחברות", "כניסה", "בחירה", "אישור", "חזרה", "חיפוש", "סימון"];
+    for (const label of pages.flatMap(labels)) {
+      for (const noun of nouns) assert.ok(!label.startsWith(noun), `button "${label}" starts with the noun ${noun}`);
+    }
+  });
+});

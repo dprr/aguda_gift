@@ -49,6 +49,29 @@ that student's gender. So these texts must follow it:
 - Many second-person verbs are spelled the same for both: בחרת, קיבלת, אינך. They need no
   pair.
 
+## Buttons use the imperative, never a verbal noun
+
+The owner's rule. A button is an instruction to the user, so it uses the active
+imperative form.
+
+| Never write | Write | Female form, when the gender is known |
+|---|---|---|
+| התנתקות | התנתק | התנתקי |
+| התחברות | התחבר | — (gender unknown before login) |
+| כניסה | היכנס | — |
+| בחירה | בחר | בחרי |
+| אישור הבחירה | אשר את הבחירה | אשרי את הבחירה |
+| חזרה | חזור | חזרי |
+| חיפוש | חפש | — (staff have no stored gender) |
+| סימון המתנה כנמסרה | סמן כנמסרה | — |
+
+- On the student pages the gender is known, so write both forms in `T` as a pair, such as
+  `select` and `selectFemale`, and choose with `isFemale()`.
+- On the login page and the staff page the gender is unknown, so use the masculine.
+- **Headings and field labels stay nouns.** "בחירת מתנה" as a title, or "חיפוש סטודנט" as a
+  field label, names a thing; it does not instruct. Only buttons and links that act take
+  the imperative.
+
 ## Check before finishing
 
 `test/hebrew-text.test.ts` scans `src/` and fails on any slash, dot, middle-dot,

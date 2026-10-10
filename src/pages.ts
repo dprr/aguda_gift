@@ -8,14 +8,13 @@ import type { GiftView, StaffStats, StudentView } from "./queries.ts";
 
 export const T = {
   title: "מתנות האגודה",
-  signIn: "התחברות עם חשבון mail.huji.ac.il",
+  signIn: "התחבר עם חשבון mail.huji.ac.il",
   logout: "התנתק",
   logoutFemale: "התנתקי",
-  tryAgain: "חזרה להתחברות",
   devTitle: "התחברות לפיתוח בלבד",
   devStudent: "כניסה כסטודנט, לפי מספר זהות",
   devStaff: "כניסה כצוות, לפי כתובת דוא\"ל",
-  devGo: "כניסה",
+  devGo: "היכנס",
   refused: {
     not_in_list: "לא מצאנו אותך ברשימת האוניברסיטה. נא לפנות למשרד האגודה.",
     no_domain: "יש להתחבר עם חשבון האוניברסיטה או עם חשבון האגודה, לא עם חשבון Gmail פרטי.",
@@ -34,13 +33,16 @@ export const T = {
     unknownMember: "אין לנו מידע על החברות שלך באגודה. נא לפנות למשרד האגודה.",
     choose: "בחירת מתנה",
     chooseHint: "אפשר לבחור מתנה אחת בלבד. הבחירה סופית.",
-    select: "בחירה",
+    select: "בחר",
+    selectFemale: "בחרי",
     soldOut: "אזל",
     left: "נותרו",
     confirmTitle: "אישור הבחירה",
     confirmFinal: "אחרי האישור אי אפשר לשנות את הבחירה.",
-    confirm: "אישור הבחירה",
-    back: "חזרה",
+    confirm: "אשר את הבחירה",
+    confirmFemale: "אשרי את הבחירה",
+    back: "חזור",
+    backFemale: "חזרי",
     yourGift: "המתנה שלך",
     collectHint: "אפשר לאסוף את המתנה בעמדת חלוקה של האגודה. יש להביא תעודת סטודנט.",
     received: "קיבלת את המתנה",
@@ -59,7 +61,7 @@ export const T = {
     title: "עמדת חלוקה",
     search: "חיפוש סטודנט",
     nationalId: "מספר זהות",
-    find: "חיפוש",
+    find: "חפש",
     notFound: "לא נמצא סטודנט עם מספר הזהות הזה.",
     membership: "חברות באגודה",
     updated: "מעודכן ל־",
@@ -68,7 +70,7 @@ export const T = {
     status: "מצב",
     takenAt: "נמסרה ב־",
     notTaken: "טרם נמסרה",
-    markTaken: "סימון המתנה כנמסרה",
+    markTaken: "סמן כנמסרה",
     lapsed: "הסטודנט אינו חבר אגודה כרגע. אין למסור את המתנה.",
     lapsedFemale: "הסטודנטית אינה חברת אגודה כרגע. אין למסור את המתנה.",
     given: "המתנה נמסרה:",
@@ -246,7 +248,7 @@ ${notice(message)}`;
     .map((g) =>
       g.selectable > 0
         ? `<div class="gift"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
-<a class="button" href="/student/confirm?gift=${g.id}">${T.student.select}</a></div>`
+<a class="button" href="/student/confirm?gift=${g.id}">${isFemale(s.gender) ? T.student.selectFemale : T.student.select}</a></div>`
         : `<div class="gift out"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
 <span class="button disabled" aria-disabled="true">${T.student.soldOut}</span></div>`,
     )
@@ -258,15 +260,16 @@ ${notice(message)}`;
 }
 
 /** The selection is final (request 3), so it takes a second, explicit step. */
-export function confirmPage(gift: GiftView): string {
+export function confirmPage(gift: GiftView, gender: string | null): string {
+  const female = isFemale(gender);
   return layout(`<h1>${T.student.confirmTitle}</h1>
 <p class="big">${esc(gift.name)}</p>
 <p class="warn">${T.student.confirmFinal}</p>
 <form method="post" action="/student/select">
   <input type="hidden" name="gift_id" value="${gift.id}">
-  <button class="button">${T.student.confirm}</button>
+  <button class="button">${female ? T.student.confirmFemale : T.student.confirm}</button>
 </form>
-<a class="button secondary" href="/student">${T.student.back}</a>`);
+<a class="button secondary" href="/student">${female ? T.student.backFemale : T.student.back}</a>`);
 }
 
 // ---- staff -----------------------------------------------------------------------------
