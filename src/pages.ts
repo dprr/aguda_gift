@@ -9,7 +9,8 @@ import type { GiftView, StaffStats, StudentView } from "./queries.ts";
 export const T = {
   title: "מתנות האגודה",
   signIn: "התחברות עם חשבון mail.huji.ac.il",
-  logout: "התנתקות",
+  logout: "התנתק",
+  logoutFemale: "התנתקי",
   tryAgain: "חזרה להתחברות",
   devTitle: "התחברות לפיתוח בלבד",
   devStudent: "כניסה כסטודנט, לפי מספר זהות",
@@ -177,7 +178,9 @@ ${error}
 ${dev}`);
 }
 
-const logoutForm = `<form method="post" action="/auth/logout"><button class="button secondary">${T.logout}</button></form>`;
+/** An imperative, not a verbal noun: התנתק, not התנתקות. Gendered for a known woman. */
+const logoutForm = (gender: string | null = null) =>
+  `<form method="post" action="/auth/logout"><button class="button secondary">${isFemale(gender) ? T.logoutFemale : T.logout}</button></form>`;
 
 const clock = new Intl.DateTimeFormat("he-IL", {
   timeZone: "Asia/Jerusalem", // plan §4: store UTC, display local time
@@ -209,7 +212,7 @@ export type Notice = { kind: "ok" | "error" | "warn"; text: string };
 const notice = (n?: Notice) => (n ? `<p class="${n.kind}">${n.text}</p>` : "");
 
 export function studentPage(s: StudentView, gifts: GiftView[], message?: Notice): string {
-  const head = `<div class="bar"><h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>${logoutForm}</div>
+  const head = `<div class="bar"><h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>${logoutForm(s.gender)}</div>
 <p>${ltr(s.national_id)} · <strong>${memberLabel(s.member, s.gender)}</strong></p>
 ${notice(message)}`;
 
@@ -328,7 +331,7 @@ export function staffPage(options: {
   const drift = stats.drift.length ? `<p class="error">${T.staff.drift}</p>` : "";
 
   return layout(
-    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm}</div>
+    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
 ${drift}
 <form method="post" action="/staff/lookup">
   <label>${T.staff.search}<input name="national_id" dir="ltr" inputmode="numeric" autofocus autocomplete="off"></label>

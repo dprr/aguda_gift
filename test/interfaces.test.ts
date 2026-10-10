@@ -266,3 +266,20 @@ describe("gendered forms", () => {
     assert.match(forced.body, /הסטודנטית אינה חברת אגודה/);
   });
 });
+
+describe("logout button", () => {
+  const setGender = (id: string, gender: string | null) =>
+    pool.query("UPDATE students SET gender = $2 WHERE national_id = $1", [id, gender]);
+  const button = (html: string) => html.match(/action="\/auth\/logout"><button[^>]*>([^<]+)</)?.[1];
+
+  test("imperative, gendered for the student; masculine for staff", async () => {
+    await setGender(ids[0], "נקבה");
+    await setGender(ids[1], "זכר");
+    await setGender(ids[2], null);
+    const page = async (id: string) => (await app.inject({ url: "/student", cookies: await asStudent(id) })).body;
+    assert.equal(button(await page(ids[0])), "התנתקי");
+    assert.equal(button(await page(ids[1])), "התנתק");
+    assert.equal(button(await page(ids[2])), "התנתק", "unknown gender is masculine");
+    assert.equal(button((await app.inject({ url: "/staff", cookies: await asStaff() })).body), "התנתק");
+  });
+});
