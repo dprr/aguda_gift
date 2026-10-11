@@ -35,6 +35,8 @@ export type GiftView = {
   id: number;
   name: string;
   description: string;
+  /** A file name in img/, or null if the gift has no photo. */
+  image: string | null;
   starting_inventory: number;
   requested_count: number;
   given_count: number;
@@ -46,7 +48,7 @@ export type GiftView = {
 
 export async function listGifts(): Promise<GiftView[]> {
   const r = await pool.query(
-    `SELECT id, name, description, starting_inventory, requested_count, given_count,
+    `SELECT id, name, description, image, starting_inventory, requested_count, given_count,
             starting_inventory - requested_count AS selectable,
             starting_inventory - given_count     AS in_box
        FROM gifts ORDER BY id`,

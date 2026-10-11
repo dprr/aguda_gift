@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
@@ -33,6 +35,7 @@ export type AppOptions = {
 const SESSION_COOKIE = "session";
 const OAUTH_COOKIE = "oauth";
 const SESSION_HOURS = 12; // one desk shift
+const IMG_DIR = join(import.meta.dirname, "..", "img");
 
 export async function buildApp(options: AppOptions) {
   const survey = options.survey ?? SURVEY;
@@ -101,6 +104,20 @@ export async function buildApp(options: AppOptions) {
 
   const refuse = (reply: FastifyReply, reason: RefusalReason) =>
     reply.redirect(`/?error=${reason}`);
+
+  // ---- gift photos --------------------------------------------------------------------
+
+  // Read once, at start. A request names a file from this map or gets 404, so it can
+  // never reach a path outside img/.
+  const images = new Map<string, Buffer>();
+  for (const file of await readdir(IMG_DIR).catch(() => [])) {
+    if (/\.jpe?g$/i.test(file)) images.set(file, await readFile(join(IMG_DIR, file)));
+  }
+  app.get<{ Params: { file: string } }>("/img/:file", async (request, reply) => {
+    const image = images.get(request.params.file);
+    if (!image) return reply.code(404).send("Not found");
+    return reply.type("image/jpeg").header("cache-control", "public, max-age=86400").send(image);
+  });
 
   // ---- the one login page -------------------------------------------------------------
 

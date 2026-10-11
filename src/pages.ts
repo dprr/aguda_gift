@@ -173,6 +173,9 @@ function layout(body: string, wide = false): string {
   .gift { border: 2px solid #d6d8de; border-radius: 10px; padding: 0.9rem;
           display: flex; flex-direction: column; gap: 0.4rem; }
   .gift.out { opacity: 0.5; }
+  .gift img, .photo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px;
+                      background: #f1f2f4; }
+  .photo { max-width: 16rem; display: block; }
   .gift strong { font-size: 1.1rem; }
   .big { font-size: 1.5rem; font-weight: 700; margin: 0.3rem 0; }
   .button.disabled { background: #9aa0a6; cursor: default; }
@@ -299,9 +302,9 @@ ${notice(message)}`;
   const cards = gifts
     .map((g) =>
       g.selectable > 0
-        ? `<div class="gift"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
+        ? `<div class="gift">${photo(g)}<strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
 <a class="button" href="/student/confirm?gift=${g.id}">${isFemale(s.gender) ? T.student.selectFemale : T.student.select}</a></div>`
-        : `<div class="gift out"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
+        : `<div class="gift out">${photo(g)}<strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
 <span class="button disabled" aria-disabled="true">${T.student.soldOut}</span></div>`,
     )
     .join("\n");
@@ -398,10 +401,15 @@ ${fields}
 </form>`);
 }
 
+/** The gift's photo, if it has one. The name beside it serves as the text alternative. */
+const photo = (g: GiftView, cls = "") =>
+  g.image ? `<img${cls ? ` class="${cls}"` : ""} src="/img/${encodeURIComponent(g.image)}" alt="" loading="lazy">` : "";
+
 /** The selection is final (request 3), so it takes a second, explicit step. */
 export function confirmPage(gift: GiftView, gender: string | null): string {
   const female = isFemale(gender);
   return layout(`<h1>${T.student.confirmTitle}</h1>
+${photo(gift, "photo")}
 <p class="big">${esc(gift.name)}</p>
 <p class="warn">${female ? T.student.confirmFinalFemale : T.student.confirmFinal}</p>
 <form method="post" action="/student/select">

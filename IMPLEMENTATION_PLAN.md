@@ -672,6 +672,7 @@ document is a wish list, and a section in it is not a request.
 | 20 | A student must be a member at selection **and** at collection. A lapsed member is refused at the desk, and the unit stays held |
 | 21 | Hebrew text uses no gendered new-speak. Text about one known student follows `students.gender`; masculine only when the gender is unknown |
 | 22 | Every student, member or not, submits a survey before selecting a gift. Submitted is final: no editing, and no re-asking when questions are added later |
+| 23 | The 4 gifts are the backpack, the thermal cup, the laptop stand, and the lunch bag, each shown with its photo from `img/` |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

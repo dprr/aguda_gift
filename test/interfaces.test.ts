@@ -4,6 +4,7 @@ import { after, beforeEach, describe, test } from "node:test";
 import type { GoogleLogin } from "../src/auth.ts";
 import { pool } from "../src/db.ts";
 import { markTaken, selectGift } from "../src/gifts.ts";
+import { GIFTS } from "../src/seed.ts";
 import { buildApp } from "../src/server.ts";
 import { freshDatabase, gift, loadStudents, setMember, student } from "./helpers.ts";
 
@@ -56,6 +57,28 @@ describe("student page", () => {
     assert.equal(res.statusCode, 200);
     assert.equal(count(res.body, 'href="/student/confirm?gift='), 4);
     assert.equal(res.headers["cache-control"], "no-store");
+  });
+
+  test("a gift with a photo shows it, and the photo is served", async () => {
+    await pool.query("UPDATE gifts SET image = 'backpack.jpeg' WHERE id = 1");
+    const cookies = await asStudent(ids[0]);
+    const res = await app.inject({ url: "/student", cookies });
+    assert.equal(count(res.body, '<img src="/img/backpack.jpeg"'), 1, "only gift 1 has a photo");
+    const confirm = await app.inject({ url: "/student/confirm?gift=1", cookies });
+    assert.match(confirm.body, /<img class="photo" src="\/img\/backpack.jpeg"/);
+
+    const image = await app.inject({ url: "/img/backpack.jpeg" });
+    assert.equal(image.statusCode, 200);
+    assert.equal(image.headers["content-type"], "image/jpeg");
+  });
+
+  test("every seeded gift's photo exists, and nothing outside img/ is served", async () => {
+    for (const g of GIFTS) {
+      assert.equal((await app.inject({ url: `/img/${g.image}` })).statusCode, 200, g.name);
+    }
+    for (const url of ["/img/..%2Fpackage.json", "/img/../package.json", "/img/missing.jpeg"]) {
+      assert.equal((await app.inject({ url })).statusCode, 404, url);
+    }
   });
 
   test("a sold-out gift is shown but cannot be chosen (request 19)", async () => {
