@@ -196,7 +196,18 @@ describe("the live survey", () => {
       const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
       return (await live.inject({ url: "/student", cookies: { session: r.cookies.find((c) => c.name === "session")!.value } })).body;
     };
-    assert.match(await page(ids[0]), /שוקלת לעבור לטכניון/);
-    assert.match(await page(ids[1]), /שוקל לעבור לטכניון/, "unknown gender is masculine");
+    const her = await page(ids[0]);
+    const him = await page(ids[1]);
+    assert.match(her, /שוקלת לעבור לטכניון/);
+    assert.match(her, /מה את חושבת על/);
+    assert.match(her, /האם את צופה ליהנות/);
+    assert.match(him, /שוקל לעבור לטכניון/, "unknown gender is masculine");
+    assert.match(him, /מה אתה חושב על/);
+    assert.match(him, /האם אתה צופה ליהנות/);
+    // The owner's rules: never the plural אתם, and the spelling ליהנות.
+    for (const html of [her, him]) {
+      assert.doesNotMatch(html, /אתם/);
+      assert.doesNotMatch(html, /להנות/);
+    }
   });
 });

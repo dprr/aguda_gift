@@ -49,6 +49,19 @@ that student's gender. So these texts must follow it:
 - Many second-person verbs are spelled the same for both: בחרת, קיבלת, אינך. They need no
   pair.
 
+## Address one student, in the singular
+
+The owner's rule. Text that speaks to the student uses the singular, gendered form, not
+the plural אתם as a way to avoid choosing:
+
+| Never write | Man, or gender unknown | Woman |
+|---|---|---|
+| מה אתם חושבים | מה אתה חושב | מה את חושבת |
+| האם אתם צופים | האם אתה צופה | האם את צופה |
+
+Give the feminine form as `labelFemale`. Words spelled the same for both, such as שלך,
+צופה, בחרת, need no pair.
+
 ## Buttons use the imperative, never a verbal noun
 
 The owner's rule. A button is an instruction to the user, so it uses the active

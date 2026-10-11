@@ -34,14 +34,18 @@ export type Question =
 
 export type Survey = { version: number; questions: Question[] };
 
-/** The live survey, as supplied by the owner on 2026-10-11. */
+/**
+ * The live survey, as supplied by the owner on 2026-10-11.
+ * Version 2: singular, gendered wording instead of אתם, and the spelling ליהנות.
+ */
 export const SURVEY: Survey = {
-  version: 1,
+  version: 2,
   questions: [
     {
       id: "fences",
       kind: "choice",
-      label: "מה אתם חושבים על הגדרות החדשות בגבעת רם?",
+      label: "מה אתה חושב על הגדרות החדשות בגבעת רם?",
+      labelFemale: "מה את חושבת על הגדרות החדשות בגבעת רם?",
       required: true,
       options: [
         { value: "disaster", label: "אסון לאומי" },
@@ -59,7 +63,8 @@ export const SURVEY: Survey = {
     {
       id: "welfare",
       kind: "choice",
-      label: "האם אתם צופים להנות מהטבה שתשלום דמי רווחה נותנת?",
+      label: "האם אתה צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
+      labelFemale: "האם את צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
       required: true,
       options: [
         { value: "yes", label: "כן" },
