@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
-import type { Answers, Question, Survey } from "./survey.ts";
+import { type Question, type Survey, textKey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -169,6 +169,7 @@ function layout(body: string, wide = false): string {
   fieldset.question legend { color: #1b1b1f; font-weight: 600; padding-inline: 0.3rem; }
   .option { display: block; padding-block: 0.3rem; }
   .option input { width: auto; margin-inline-end: 0.4rem; }
+  .option input.other { width: 60%; margin-block: 0; }
   textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.5rem; }
 </style>
 </head>
@@ -303,10 +304,13 @@ export function surveyPage(
       } else {
         const type = q.kind === "choice" ? "radio" : "checkbox";
         input = q.options
-          .map(
-            (o) =>
-              `<label class="option"><input type="${type}" name="${esc(q.id)}" value="${esc(o.value)}"${has(q, o.value) ? " checked" : ""}> ${esc(o.label)}</label>`,
-          )
+          .map((o) => {
+            const optionLabel = (female && o.labelFemale) || o.label;
+            const box = o.withText
+              ? ` <input type="text" class="other" name="${esc(textKey(q.id))}" maxlength="1000" value="${esc(values[textKey(q.id)])}">`
+              : "";
+            return `<label class="option"><input type="${type}" name="${esc(q.id)}" value="${esc(o.value)}"${has(q, o.value) ? " checked" : ""}> ${esc(optionLabel)}${box}</label>`;
+          })
           .join("");
       }
       return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${error}${input}</fieldset>`;

@@ -153,3 +153,50 @@ describe("the survey comes before the gifts", () => {
     assert.deepEqual((await student(ids[2])).survey.answers, {});
   });
 });
+
+describe("the live survey", () => {
+  test("is well-formed", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const ids = LIVE.questions.map((q) => q.id);
+    assert.equal(new Set(ids).size, ids.length, "question ids are unique");
+    for (const q of LIVE.questions) {
+      assert.match(q.id, /^[a-z][a-z0-9_]*$/, `id ${q.id}`);
+      assert.ok(q.label.trim(), `label of ${q.id}`);
+      if (q.kind !== "text") {
+        const values = q.options.map((o) => o.value);
+        assert.ok(values.length > 0, `${q.id} has options`);
+        assert.equal(new Set(values).size, values.length, `${q.id} option values are unique`);
+        for (const o of q.options) assert.ok(o.label.trim(), `option label in ${q.id}`);
+      }
+    }
+  });
+
+  test('"אחר" requires its text, and the text is stored beside the choice', async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const base = { father: "no", welfare: "yes" };
+    const missing = validate(LIVE, { ...base, fences: "other", fences_text: "  " });
+    assert.deepEqual(!missing.ok && missing.errors, { fences: "required" });
+
+    const given = validate(LIVE, { ...base, fences: "other", fences_text: " דעה אחרת " });
+    assert.deepEqual(given, { ok: true, answers: { fences: "other", fences_text: "דעה אחרת", ...base } });
+
+    // The text of an option that was not chosen is dropped.
+    const ignored = validate(LIVE, { ...base, fences: "disaster", fences_text: "leftover" });
+    assert.deepEqual(ignored, { ok: true, answers: { fences: "disaster", ...base } });
+  });
+
+  test("an option's wording follows the student's gender", async () => {
+    const live = await buildApp({
+      google: noGoogle, sessionSecret: "s".repeat(32), domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
+      devLogin: true, production: false, origin: ORIGIN,
+    });
+    await pool.query("UPDATE students SET gender = 'נקבה' WHERE national_id = $1", [ids[0]]);
+    await pool.query("UPDATE students SET gender = NULL WHERE national_id = $1", [ids[1]]);
+    const page = async (id: string) => {
+      const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
+      return (await live.inject({ url: "/student", cookies: { session: r.cookies.find((c) => c.name === "session")!.value } })).body;
+    };
+    assert.match(await page(ids[0]), /שוקלת לעבור לטכניון/);
+    assert.match(await page(ids[1]), /שוקל לעבור לטכניון/, "unknown gender is masculine");
+  });
+});
