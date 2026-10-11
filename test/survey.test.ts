@@ -93,7 +93,7 @@ describe("the survey comes before the gifts", () => {
   test("an error comes back with every answer kept", async () => {
     const cookies = await asStudent(ids[0]);
     const res = await app.inject({ method: "POST", url: "/student/survey", cookies, ...form("topics=culture&note=") });
-    assert.match(res.body, /יש לענות על השאלה/);
+    assert.match(res.body, /(ענה|עני) על השאלה/);
     assert.match(res.body, /value="culture" checked/);
     assert.equal((await student(ids[0])).survey, null);
   });
@@ -109,7 +109,7 @@ describe("the survey comes before the gifts", () => {
     assert.deepEqual(stored.answers, { year: "2", topics: ["sport", "culture"], note: "תודה" });
 
     const page = (await app.inject({ url: "/student?surveyed=1", cookies })).body;
-    assert.match(page, /התשובות נשמרו/);
+    assert.match(page, /שמרנו את התשובות/);
     assert.match(page, /\/student\/confirm\?gift=/);
     assert.deepEqual(await selectGift(ids[0], 1), { ok: true, giftId: 1 });
   });

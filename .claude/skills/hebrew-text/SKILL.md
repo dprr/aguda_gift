@@ -49,6 +49,30 @@ that student's gender. So these texts must follow it:
 - Many second-person verbs are spelled the same for both: בחרת, קיבלת, אינך. They need no
   pair.
 
+## Active voice, always. Never an impersonal instruction
+
+The owner's rule. Tell the person what to do, in the active imperative. Never use
+impersonal forms such as יש ל…, אין ל…, נא ל…, אפשר ל…, or אי אפשר, and never the passive.
+
+| Never write | Man, or gender unknown | Woman |
+|---|---|---|
+| יש לענות על השאלה | ענה על השאלה | עני על השאלה |
+| נא לפנות למשרד האגודה | פנה למשרד האגודה | פני למשרד האגודה |
+| נא לנסות שוב | נסה שוב | נסי שוב |
+| אין למסור את המתנה | אל תמסור את המתנה | אל תמסרי את המתנה |
+| אפשר לבחור מתנה אחת | בחר מתנה אחת | בחרי מתנה אחת |
+| אי אפשר לשנות את הבחירה | לא תוכל לשנות את הבחירה | לא תוכלי לשנות את הבחירה |
+| הבחירה נשמרה (passive) | שמרנו את הבחירה | — |
+| ההתחברות בוטלה (passive) | ביטלת את ההתחברות | — |
+| לא נמצא סטודנט (passive) | לא מצאנו סטודנט | — |
+
+- When the text reports what the system did, the system is the subject, in the first
+  person plural: שמרנו, לא מצאנו.
+- "אין לנו מידע" and "יש לך" are allowed. A pronoun after ל is possession, not an
+  instruction.
+- `test/hebrew-text.test.ts` fails on any impersonal form in `src/`. It cannot detect the
+  passive, so check for passive verbs yourself.
+
 ## Address one student, in the singular
 
 The owner's rule. Text that speaks to the student uses the singular, gendered form, not

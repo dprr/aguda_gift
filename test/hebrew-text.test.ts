@@ -39,6 +39,37 @@ test("no gendered new-speak forms in Hebrew text", async () => {
   assert.deepEqual(found, [], `use the masculine form as neutral:\n${found.join("\n")}`);
 });
 
+// An impersonal instruction: יש / אין / נא + an infinitive, or אפשר / אי אפשר. The
+// owner's rule is the active voice: ענה, not יש לענות. A pronoun after ל is not an
+// infinitive, so "אין לנו מידע" and "יש לך" stay allowed.
+const L = "[\\u05D0-\\u05EA]";
+const IMPERSONAL = new RegExp(
+  `(^|[^\\u05D0-\\u05EA])(יש|אין|נא) ל(?!(נו|ך|כם|כן|ו|ה|י|הם|הן)(?!${L}))${L}+|אי אפשר|(^|[^\\u05D0-\\u05EA])אפשר ל${L}`,
+  "u",
+);
+
+test("no impersonal instructions in Hebrew text: active voice only", async () => {
+  const found: string[] = [];
+  for (const dir of ["src", "web"]) {
+    for await (const file of files(join(root, dir))) {
+      const lines = (await readFile(file, "utf8")).split("\n");
+      lines.forEach((line, i) => {
+        if (IMPERSONAL.test(line)) found.push(`${file.slice(root.length + 1)}:${i + 1}: ${line.trim()}`);
+      });
+    }
+  }
+  assert.deepEqual(found, [], `write the active voice, for example ענה instead of יש לענות:\n${found.join("\n")}`);
+});
+
+test("the impersonal pattern catches what it must, and only that", () => {
+  for (const bad of ["יש לענות על השאלה", "אין למסור", "נא לפנות למשרד", "אי אפשר לשנות", "אפשר לבחור"]) {
+    assert.match(bad, IMPERSONAL, bad);
+  }
+  for (const good of ["אין לנו מידע", "יש לך שאלה", "אין קבוצת וואטסאפ", "ענה על השאלה", "אל תמסור את המתנה"]) {
+    assert.doesNotMatch(good, IMPERSONAL, good);
+  }
+});
+
 test("the pattern catches every forbidden spelling", () => {
   for (const bad of ["סטודנט/ית", "חבר/ת", "סטודנט.ית", "סטודנט·ית", "סטודנט(ית)"]) {
     assert.match(bad, NEWSPEAK, bad);

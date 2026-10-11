@@ -5,7 +5,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
 import { markTaken, selectGift } from "./gifts.ts";
-import { confirmPage, demoBanner, esc, lapsedText, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, surveyPage, T, when } from "./pages.ts";
+import { confirmPage, demoBanner, esc, lapsedText, loginPage, noSelectionText, studentErrorText, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
@@ -243,7 +243,7 @@ export async function buildApp(options: AppOptions) {
       if (surveyed) message = { kind: "ok", text: T.survey.thanks };
       else if (saved) message = { kind: "ok", text: T.student.saved };
       else if (error && error in T.student.errors) {
-        message = { kind: "error", text: T.student.errors[error as StudentError] };
+        message = { kind: "error", text: studentErrorText(error as StudentError, s.gender) };
       }
       return html(reply, studentPage(s, await listGifts(), message));
     },
@@ -325,7 +325,7 @@ export async function buildApp(options: AppOptions) {
       } else if (result.reason === "not_member") {
         message = { kind: "error", text: lapsedText(student?.gender ?? null) };
       } else if (result.reason === "no_selection") {
-        message = { kind: "warn", text: T.staff.noSelection };
+        message = { kind: "warn", text: noSelectionText(student?.gender ?? null) };
       } else {
         message = { kind: "error", text: T.staff.notFound };
       }

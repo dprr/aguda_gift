@@ -17,13 +17,13 @@ export const T = {
   devStaff: "כניסה כצוות, לפי כתובת דוא\"ל",
   devGo: "היכנס",
   refused: {
-    not_in_list: "לא מצאנו אותך ברשימת האוניברסיטה. נא לפנות למשרד האגודה.",
-    no_domain: "יש להתחבר עם חשבון האוניברסיטה או עם חשבון האגודה, לא עם חשבון Gmail פרטי.",
+    not_in_list: "לא מצאנו אותך ברשימת האוניברסיטה. פנה למשרד האגודה.",
+    no_domain: "התחבר עם חשבון האוניברסיטה או עם חשבון האגודה, לא עם חשבון Gmail פרטי.",
     wrong_domain: "החשבון הזה אינו חשבון של האוניברסיטה או של האגודה.",
     unverified_email: "Google לא אישר את כתובת הדוא\"ל של החשבון.",
-    expired: "פג תוקף ההתחברות. נא לנסות שוב.",
-    cancelled: "ההתחברות בוטלה.",
-    google_error: "Google לא השלים את ההתחברות. נא לנסות שוב.",
+    expired: "פג תוקף ההתחברות. נסה שוב.",
+    cancelled: "ביטלת את ההתחברות.",
+    google_error: "Google לא השלים את ההתחברות. נסה שוב.",
   },
   member: { true: "חבר אגודה", false: "לא חבר אגודה", null: "סטטוס חברות לא ידוע" },
   memberFemale: { true: "חברת אגודה", false: "לא חברת אגודה", null: "סטטוס חברות לא ידוע" },
@@ -31,42 +31,53 @@ export const T = {
   student: {
     notMember: "לפי רשימת האוניברסיטה, אינך חבר אגודה. רק חברי אגודה יכולים לבחור מתנה.",
     notMemberFemale: "לפי רשימת האוניברסיטה, אינך חברת אגודה. רק חברי אגודה יכולים לבחור מתנה.",
-    unknownMember: "אין לנו מידע על החברות שלך באגודה. נא לפנות למשרד האגודה.",
+    unknownMember: "אין לנו מידע על החברות שלך באגודה. פנה למשרד האגודה.",
+    unknownMemberFemale: "אין לנו מידע על החברות שלך באגודה. פני למשרד האגודה.",
     choose: "בחירת מתנה",
-    chooseHint: "אפשר לבחור מתנה אחת בלבד. הבחירה סופית.",
+    chooseHint: "בחר מתנה אחת בלבד. הבחירה סופית.",
+    chooseHintFemale: "בחרי מתנה אחת בלבד. הבחירה סופית.",
     select: "בחר",
     selectFemale: "בחרי",
     soldOut: "אזל",
-    left: "נותרו",
     confirmTitle: "אישור הבחירה",
-    confirmFinal: "אחרי האישור אי אפשר לשנות את הבחירה.",
+    confirmFinal: "אחרי האישור לא תוכל לשנות את הבחירה.",
+    confirmFinalFemale: "אחרי האישור לא תוכלי לשנות את הבחירה.",
     confirm: "אשר את הבחירה",
     confirmFemale: "אשרי את הבחירה",
     back: "חזור",
     backFemale: "חזרי",
     yourGift: "המתנה שלך",
-    collectHint: "אפשר לאסוף את המתנה בעמדת חלוקה של האגודה. יש להביא תעודת סטודנט.",
+    collectHint: "אסוף את המתנה בעמדת חלוקה של האגודה, והבא תעודת סטודנט.",
+    collectHintFemale: "אספי את המתנה בעמדת חלוקה של האגודה, והביאי תעודת סטודנט.",
     received: "קיבלת את המתנה",
-    lapsed: "החברות שלך באגודה אינה פעילה כרגע. כדי לקבל את המתנה יש לחדש את החברות.",
-    saved: "הבחירה נשמרה.",
+    lapsed: "החברות שלך באגודה אינה פעילה כרגע. כדי לקבל את המתנה, חדש את החברות.",
+    lapsedFemale: "החברות שלך באגודה אינה פעילה כרגע. כדי לקבל את המתנה, חדשי את החברות.",
+    saved: "שמרנו את הבחירה.",
     errors: {
-      sold_out: "המתנה שבחרת אזלה הרגע. אפשר לבחור מתנה אחרת.",
+      sold_out: "המתנה שבחרת אזלה הרגע. בחר מתנה אחרת.",
       already_selected: "כבר בחרת מתנה. הבחירה סופית.",
       not_member: "רק חברי אגודה יכולים לבחור מתנה.",
-      unknown_gift: "המתנה לא נמצאה.",
+      unknown_gift: "לא מצאנו את המתנה.",
       unknown_student: "לא מצאנו אותך ברשימת האוניברסיטה.",
-      survey_missing: "יש לענות על הסקר לפני בחירת מתנה.",
+      survey_missing: "ענה על הסקר לפני בחירת מתנה.",
     },
+    /** The feminine form of any error above whose wording changes for a woman. */
+    errorsFemale: {
+      sold_out: "המתנה שבחרת אזלה הרגע. בחרי מתנה אחרת.",
+      survey_missing: "עני על הסקר לפני בחירת מתנה.",
+    } as Partial<Record<string, string>>,
   },
 
   survey: {
     title: "סקר",
-    intro: "לפני בחירת המתנה יש לענות על הסקר. אחרי השליחה אי אפשר לשנות את התשובות.",
+    intro: "לפני בחירת המתנה, ענה על הסקר. אחרי השליחה לא תוכל לשנות את התשובות.",
+    introFemale: "לפני בחירת המתנה, עני על הסקר. אחרי השליחה לא תוכלי לשנות את התשובות.",
     submit: "שלח",
     submitFemale: "שלחי",
     required: "חובה",
-    errors: { required: "יש לענות על השאלה.", invalid: "התשובה אינה תקינה." },
-    thanks: "תודה. התשובות נשמרו.",
+    errors: { required: "ענה על השאלה.", invalid: "התשובה אינה תקינה." },
+    errorsFemale: { required: "עני על השאלה.", invalid: "התשובה אינה תקינה." },
+    thanks: "תודה. שמרנו את התשובות.",
     pick: "בחר",
     pickFemale: "בחרי",
     instagramAll: "האינסטגרם של האגודה",
@@ -83,26 +94,29 @@ export const T = {
     search: "חיפוש סטודנט",
     nationalId: "מספר זהות",
     find: "חפש",
-    notFound: "לא נמצא סטודנט עם מספר הזהות הזה.",
+    notFound: "לא מצאנו סטודנט עם מספר הזהות הזה.",
     membership: "חברות באגודה",
-    updated: "מעודכן ל־",
+    updated: "נכון ל־",
     gift: "מתנה שנבחרה",
-    noSelection: "לא נבחרה מתנה. אין למסור מתנה.",
+    noSelection: "הסטודנט לא בחר מתנה. אל תמסור מתנה.",
+    noSelectionFemale: "הסטודנטית לא בחרה מתנה. אל תמסור מתנה.",
     status: "מצב",
-    takenAt: "נמסרה ב־",
-    notTaken: "טרם נמסרה",
+    takenAt: "הסטודנט קיבל אותה ב־",
+    takenAtFemale: "הסטודנטית קיבלה אותה ב־",
+    notTaken: "הסטודנט טרם קיבל אותה",
+    notTakenFemale: "הסטודנטית טרם קיבלה אותה",
     markTaken: "סמן כנמסרה",
-    lapsed: "הסטודנט אינו חבר אגודה כרגע. אין למסור את המתנה.",
-    lapsedFemale: "הסטודנטית אינה חברת אגודה כרגע. אין למסור את המתנה.",
-    given: "המתנה נמסרה:",
-    alreadyRecent: "המתנה סומנה כנמסרה לפני רגע. כנראה הלחיצה הקודמת הצליחה. אין צורך לעשות דבר.",
-    alreadyOld: "המתנה כבר נמסרה ב־",
-    alreadyOldEnd: "אין למסור אותה שוב.",
+    lapsed: "הסטודנט אינו חבר אגודה כרגע. אל תמסור את המתנה.",
+    lapsedFemale: "הסטודנטית אינה חברת אגודה כרגע. אל תמסור את המתנה.",
+    given: "מסרת את המתנה:",
+    alreadyRecent: "כנראה הלחיצה הקודמת שלך כבר רשמה את המסירה, לפני רגע. אל תמסור את המתנה שוב.",
+    alreadyOld: "עמדת חלוקה כבר מסרה את המתנה ב־",
+    alreadyOldEnd: "אל תמסור אותה שוב.",
     history: "היסטוריה",
     collected: "קבלת מתנה:",
     stock: "מלאי",
-    stockCols: ["מתנה", "מלאי התחלתי", "נבחרו", "נמסרו", "פנויות לבחירה", "במלאי בפועל"],
-    drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. יש לדווח למפתח.",
+    stockCols: ["מתנה", "מלאי התחלתי", "סטודנטים בחרו", "סטודנטים קיבלו", "פנויות לבחירה", "במלאי בפועל"],
+    drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. דווח למפתח.",
   },
 } as const;
 
@@ -111,7 +125,7 @@ export type StudentError = keyof typeof T.student.errors;
 export type RefusalReason = keyof typeof T.refused;
 
 /** DEMO=1 only. Inline style, so it shows even if the page's own styles change. */
-export const demoBanner = `<div role="alert" style="background:#9c1f1f;color:#fff;font-weight:700;text-align:center;padding:0.7rem;margin:-2rem -1rem 1.5rem">${"גרסת הדגמה. כל הנתונים מומצאים, וכל אחד יכול להתחבר בתור כל משתמש. אין להזין מידע אמיתי."}</div>`;
+export const demoBanner = `<div role="alert" style="background:#9c1f1f;color:#fff;font-weight:700;text-align:center;padding:0.7rem;margin:-2rem -1rem 1.5rem">${"גרסת הדגמה. כל הנתונים בדויים, וכל אחד יכול להתחבר בתור כל משתמש. אל תזין מידע אמיתי."}</div>`;
 
 /** Escape text before it goes into HTML. */
 export function esc(value: unknown): string {
@@ -233,6 +247,14 @@ export const isFemale = (gender: string | null) =>
 const memberLabel = (member: boolean | null, gender: string | null) =>
   (isFemale(gender) ? T.memberFemale : T.member)[String(member) as "true" | "false" | "null"];
 
+/** Staff: this student selected no gift, so hand nothing over. */
+export const noSelectionText = (gender: string | null) =>
+  isFemale(gender) ? T.staff.noSelectionFemale : T.staff.noSelection;
+
+/** A student-page error, in the feminine form for a known woman when one exists. */
+export const studentErrorText = (reason: StudentError, gender: string | null) =>
+  (isFemale(gender) && T.student.errorsFemale[reason]) || T.student.errors[reason];
+
 /** Staff: this student is not a member now, so do not hand the gift over. */
 export const lapsedText = (gender: string | null) =>
   isFemale(gender) ? T.staff.lapsedFemale : T.staff.lapsed;
@@ -243,6 +265,7 @@ export type Notice = { kind: "ok" | "error" | "warn"; text: string };
 const notice = (n?: Notice) => (n ? `<p class="${n.kind}">${n.text}</p>` : "");
 
 export function studentPage(s: StudentView, gifts: GiftView[], message?: Notice): string {
+  const f = isFemale(s.gender);
   const head = `<div class="bar"><h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>${logoutForm(s.gender)}</div>
 <p>${ltr(s.national_id)} · <strong>${memberLabel(s.member, s.gender)}</strong></p>
 ${notice(message)}`;
@@ -256,18 +279,18 @@ ${notice(message)}`;
 
   // Selected, not collected. A lapsed member keeps the unit, but must renew (request 20).
   if (s.gift_id !== null) {
-    const lapsed = s.member !== true ? `<p class="warn">${T.student.lapsed}</p>` : "";
+    const lapsed = s.member !== true ? `<p class="warn">${f ? T.student.lapsedFemale : T.student.lapsed}</p>` : "";
     return layout(`${head}
 <div class="card"><p>${T.student.yourGift}</p><p class="big">${esc(s.gift_name)}</p>
-<p class="hint">${T.student.chooseHint}</p>${lapsed}
-<p>${T.student.collectHint}</p></div>`);
+<p class="hint">${f ? T.student.chooseHintFemale : T.student.chooseHint}</p>${lapsed}
+<p>${f ? T.student.collectHintFemale : T.student.collectHint}</p></div>`);
   }
 
   // No selection, and not a member: nothing to choose.
   if (s.member !== true) {
     const text =
       s.member === null
-        ? T.student.unknownMember
+        ? f ? T.student.unknownMemberFemale : T.student.unknownMember
         : isFemale(s.gender) ? T.student.notMemberFemale : T.student.notMember;
     return layout(`${head}<p class="warn">${text}</p>`);
   }
@@ -284,7 +307,7 @@ ${notice(message)}`;
     .join("\n");
   return layout(`${head}
 <h2>${T.student.choose}</h2>
-<p class="hint">${T.student.chooseHint}</p>
+<p class="hint">${f ? T.student.chooseHintFemale : T.student.chooseHint}</p>
 <div class="gifts">${cards}</div>`);
 }
 
@@ -350,7 +373,7 @@ export function surveyPage(
     .map((q) => {
       const label = (female && q.labelFemale) || q.label;
       const mark = q.required ? ` <span class="hint">(${T.survey.required})</span>` : "";
-      const error = state.errors?.[q.id] ? `<p class="error">${T.survey.errors[state.errors[q.id]]}</p>` : "";
+      const error = state.errors?.[q.id] ? `<p class="error">${(female ? T.survey.errorsFemale : T.survey.errors)[state.errors[q.id]]}</p>` : "";
       let input: string;
       if (q.kind === "text") {
         input = `<textarea name="${esc(q.id)}" rows="3" maxlength="1000">${esc(values[q.id])}</textarea>`;
@@ -368,7 +391,7 @@ export function surveyPage(
     .join("\n");
 
   return layout(`<div class="bar"><h1>${T.survey.title}</h1>${logoutForm(s.gender)}</div>
-<p>${T.survey.intro}</p>
+<p>${female ? T.survey.introFemale : T.survey.intro}</p>
 <form method="post" action="/student/survey">
 ${fields}
 <button class="button">${female ? T.survey.submitFemale : T.survey.submit}</button>
@@ -380,7 +403,7 @@ export function confirmPage(gift: GiftView, gender: string | null): string {
   const female = isFemale(gender);
   return layout(`<h1>${T.student.confirmTitle}</h1>
 <p class="big">${esc(gift.name)}</p>
-<p class="warn">${T.student.confirmFinal}</p>
+<p class="warn">${female ? T.student.confirmFinalFemale : T.student.confirmFinal}</p>
 <form method="post" action="/student/select">
   <input type="hidden" name="gift_id" value="${gift.id}">
   <button class="button">${female ? T.student.confirmFemale : T.student.confirm}</button>
@@ -392,7 +415,8 @@ export function confirmPage(gift: GiftView, gender: string | null): string {
 
 function studentCard(s: StudentView, giftNames: Map<number, string>): string {
   let action = "";
-  if (s.gift_id === null) action = `<p class="warn">${T.staff.noSelection}</p>`;
+  const f = isFemale(s.gender);
+  if (s.gift_id === null) action = `<p class="warn">${noSelectionText(s.gender)}</p>`;
   else if (s.gift_taken_at) action = "";
   else if (s.member !== true) action = `<p class="error">${lapsedText(s.gender)}</p>`;
   else {
@@ -415,7 +439,7 @@ function studentCard(s: StudentView, giftNames: Map<number, string>): string {
   <dt>${T.staff.nationalId}</dt><dd>${ltr(s.national_id)}</dd>
   <dt>${T.staff.membership}</dt><dd>${memberLabel(s.member, s.gender)} <span class="hint">${T.staff.updated} ${when(s.member_changed_at)}</span></dd>
   <dt>${T.staff.gift}</dt><dd>${s.gift_name ? esc(s.gift_name) : "—"}</dd>
-  <dt>${T.staff.status}</dt><dd>${s.gift_taken_at ? `${T.staff.takenAt} ${when(s.gift_taken_at)}` : T.staff.notTaken}</dd>
+  <dt>${T.staff.status}</dt><dd>${s.gift_taken_at ? `${f ? T.staff.takenAtFemale : T.staff.takenAt} ${when(s.gift_taken_at)}` : f ? T.staff.notTakenFemale : T.staff.notTaken}</dd>
 </dl>
 ${action}
 ${history}

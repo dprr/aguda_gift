@@ -104,7 +104,7 @@ describe("student page", () => {
     await selectGift(ids[0], 2);
     await setMember(ids[0], false);
     const res = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
-    assert.match(res.body, /לחדש את החברות/);
+    assert.match(res.body, /כדי לקבל את המתנה, חדש(י)? את החברות/);
   });
 
   test("a collected gift is shown as received", async () => {
@@ -137,7 +137,7 @@ describe("staff page", () => {
 
   test("an unknown ID says so", async () => {
     const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies: await asStaff(), ...form({ national_id: "999" }) });
-    assert.match(res.body, /לא נמצא סטודנט/);
+    assert.match(res.body, /לא מצאנו סטודנט/);
   });
 
   test("marking as taken works once; the second desk is told, and nothing is counted twice", async () => {
@@ -157,7 +157,7 @@ describe("staff page", () => {
     await markTaken(ids[0]);
     await pool.query("UPDATE students SET gift_taken_at = now() - interval '1 hour' WHERE national_id = $1", [ids[0]]);
     const res = await app.inject({ method: "POST", url: "/staff/take", cookies: await asStaff(), ...form({ national_id: ids[0] }) });
-    assert.match(res.body, /אין למסור אותה שוב/);
+    assert.match(res.body, /אל תמסור אותה שוב/);
   });
 
   test("no button for a student with no selection, or for a lapsed member (requests 6, 20)", async () => {
@@ -170,7 +170,7 @@ describe("staff page", () => {
     }
     // And a forced POST is still refused by the server.
     const forced = await app.inject({ method: "POST", url: "/staff/take", cookies, ...form({ national_id: ids[1] }) });
-    assert.match(forced.body, /אין למסור את המתנה/);
+    assert.match(forced.body, /אל תמסור את המתנה/);
     assert.equal((await gift(3)).given_count, 0);
   });
 
