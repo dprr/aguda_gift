@@ -155,7 +155,8 @@ function layout(body: string, wide = false): string {
   h1 { margin-block-start: 0; font-size: 1.5rem; }
   .button { display: block; text-align: center; background: #1f5f3f; color: #fff;
             border: 0; border-radius: 8px; padding: 0.9rem; font: inherit;
-            font-weight: 600; text-decoration: none; width: 100%; cursor: pointer; }
+            font-weight: 600; text-decoration: none; width: 100%; box-sizing: border-box;
+            cursor: pointer; }
   .hint { color: #5f6470; font-size: 0.9rem; }
   .error { background: #fdeaea; color: #9c1f1f; border-radius: 8px; padding: 0.8rem;
            font-weight: 600; }
