@@ -173,7 +173,7 @@ describe("the live survey", () => {
 
   test('"אחר" requires its text, and the text is stored beside the choice', async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
-    const base = { father: "no", welfare: "yes" };
+    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes" };
     const missing = validate(LIVE, { ...base, fences: "other", fences_text: "  " });
     assert.deepEqual(!missing.ok && missing.errors, { fences: "required" });
 
@@ -208,6 +208,71 @@ describe("the live survey", () => {
     for (const html of [her, him]) {
       assert.doesNotMatch(html, /אתם/);
       assert.doesNotMatch(html, /להנות/);
+    }
+  });
+});
+
+describe("the five questions of version 3", () => {
+  const base = { fences: "disaster", father: "no", welfare: "no", reserve: "yes", special: "no", social: "no" };
+
+  test("a dorm is required after כן, must be a real dorm, and is dropped after לא", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const missing = validate(LIVE, { ...base, dorms: "yes", dorms_choice: "" });
+    assert.deepEqual(!missing.ok && missing.errors, { dorms: "required" });
+    const fake = validate(LIVE, { ...base, dorms: "yes", dorms_choice: "hilton" });
+    assert.deepEqual(!fake.ok && fake.errors, { dorms: "invalid" });
+    const real = validate(LIVE, { ...base, dorms: "yes", dorms_choice: "meyersdorf" });
+    assert.ok(real.ok && real.answers.dorms_choice === "meyersdorf");
+    const no = validate(LIVE, { ...base, dorms: "no", dorms_choice: "meyersdorf" });
+    assert.ok(no.ok && !("dorms_choice" in no.answers));
+  });
+
+  test("special population needs its explanation after כן", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const missing = validate(LIVE, { ...base, dorms: "no", special: "yes" });
+    assert.deepEqual(!missing.ok && missing.errors, { special: "required" });
+    const given = validate(LIVE, { ...base, dorms: "no", special: "yes", special_text: "הסבר" });
+    assert.ok(given.ok && given.answers.special_text === "הסבר");
+  });
+
+  test("the last question is optional", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    assert.ok(validate(LIVE, { ...base, dorms: "no" }).ok);
+  });
+
+  test("the dorm list holds the nine dorms of the official brochure, each value once", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const q = LIVE.questions.find((x) => x.id === "dorms")!;
+    assert.ok(q.kind === "choice");
+    const follow = q.options.find((o) => o.value === "yes")!.follow!;
+    assert.ok(follow.kind === "select");
+    const values = follow.groups.flatMap((g) => g.options.map((o) => o.value));
+    assert.equal(values.length, 9);
+    assert.equal(new Set(values).size, 9);
+  });
+
+  test("the dropdown and the campus links render; links only for a configured campus", async () => {
+    const { CAMPUS_SOCIAL } = await import("../src/survey.ts");
+    const live = await buildApp({
+      google: noGoogle, sessionSecret: "s".repeat(32), domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
+      devLogin: true, production: false, origin: ORIGIN,
+    });
+    await pool.query("UPDATE students SET campus = 'הר הצופים' WHERE national_id = $1", [ids[0]]);
+    await pool.query("UPDATE students SET campus = 'רחובות' WHERE national_id = $1", [ids[1]]);
+    CAMPUS_SOCIAL["הר הצופים"] = { instagram: "https://instagram.com/test", whatsapp: "https://chat.whatsapp.com/test" };
+    try {
+      const page = async (id: string) => {
+        const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
+        return (await live.inject({ url: "/student", cookies: { session: r.cookies.find((c) => c.name === "session")!.value } })).body;
+      };
+      const scopus = await page(ids[0]);
+      assert.match(scopus, /<select class="follow" name="dorms_choice">/);
+      assert.match(scopus, /<optgroup label="עין כרם">/);
+      assert.match(scopus, /href="https:\/\/instagram.com\/test" target="_blank" rel="noopener noreferrer"/);
+      assert.match(scopus, /href="https:\/\/chat.whatsapp.com\/test"/);
+      assert.doesNotMatch(await page(ids[1]), /instagram.com/, "no links for a campus with none configured");
+    } finally {
+      delete CAMPUS_SOCIAL["הר הצופים"];
     }
   });
 });

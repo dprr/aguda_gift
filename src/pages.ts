@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
-import { type Question, type Survey, textKey } from "./survey.ts";
+import { CAMPUS_SOCIAL, followKey, type Option, type Question, type Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -67,6 +67,10 @@ export const T = {
     required: "חובה",
     errors: { required: "יש לענות על השאלה.", invalid: "התשובה אינה תקינה." },
     thanks: "תודה. התשובות נשמרו.",
+    pick: "בחר",
+    pickFemale: "בחרי",
+    instagram: "האינסטגרם של האגודה בקמפוס",
+    whatsapp: "הוואטסאפ של האגודה בקמפוס",
   },
 
   staff: {
@@ -169,7 +173,9 @@ function layout(body: string, wide = false): string {
   fieldset.question legend { color: #1b1b1f; font-weight: 600; padding-inline: 0.3rem; }
   .option { display: block; padding-block: 0.3rem; }
   .option input { width: auto; margin-inline-end: 0.4rem; }
-  .option input.other { width: 60%; margin-block: 0; }
+  .option .follow { width: 60%; margin-block: 0; font: inherit; padding: 0.3rem; }
+  /* A follow-up shows only once its own option is picked. CSS only, no JavaScript. */
+  .option input:not(:checked) ~ .follow { display: none; }
   textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.5rem; }
 </style>
 </head>
@@ -293,6 +299,32 @@ export function surveyPage(
     return Array.isArray(raw) ? raw.map(String).includes(v) : raw === v;
   };
 
+  /** A text box or a dropdown after an option. CSS hides it until the option is picked. */
+  const followUp = (q: Question, o: Option): string => {
+    if (!o.follow) return "";
+    const key = followKey(q.id, o.follow);
+    if (o.follow.kind === "text") {
+      return ` <input type="text" class="follow" name="${esc(key)}" maxlength="1000" value="${esc(values[key])}">`;
+    }
+    const groups = o.follow.groups
+      .map((g) => `<optgroup label="${esc(g.label)}">${g.options
+        .map((x) => `<option value="${esc(x.value)}"${values[key] === x.value ? " selected" : ""}>${esc(x.label)}</option>`)
+        .join("")}</optgroup>`)
+      .join("");
+    return ` <select class="follow" name="${esc(key)}"><option value="">${female ? T.survey.pickFemale : T.survey.pick}</option>${groups}</select>`;
+  };
+
+  /** The Aguda links of the student's own campus. Nothing if the campus has none. */
+  const links = (q: Question): string => {
+    if (!q.campusSocial || !s.campus) return "";
+    const c = CAMPUS_SOCIAL[s.campus];
+    if (!c) return "";
+    const a = (href: string, text: string) =>
+      `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text} ${esc(s.campus)}</a>`;
+    const parts = [c.instagram && a(c.instagram, T.survey.instagram), c.whatsapp && a(c.whatsapp, T.survey.whatsapp)].filter(Boolean);
+    return parts.length ? `<p class="hint">${parts.join(" · ")}</p>` : "";
+  };
+
   const fields = survey.questions
     .map((q) => {
       const label = (female && q.labelFemale) || q.label;
@@ -306,14 +338,11 @@ export function surveyPage(
         input = q.options
           .map((o) => {
             const optionLabel = (female && o.labelFemale) || o.label;
-            const box = o.withText
-              ? ` <input type="text" class="other" name="${esc(textKey(q.id))}" maxlength="1000" value="${esc(values[textKey(q.id)])}">`
-              : "";
-            return `<label class="option"><input type="${type}" name="${esc(q.id)}" value="${esc(o.value)}"${has(q, o.value) ? " checked" : ""}> ${esc(optionLabel)}${box}</label>`;
+            return `<label class="option"><input type="${type}" name="${esc(q.id)}" value="${esc(o.value)}"${has(q, o.value) ? " checked" : ""}> ${esc(optionLabel)}${followUp(q, o)}</label>`;
           })
           .join("");
       }
-      return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${error}${input}</fieldset>`;
+      return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${links(q)}${error}${input}</fieldset>`;
     })
     .join("\n");
 

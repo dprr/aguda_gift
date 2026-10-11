@@ -24,22 +24,51 @@ export type Option = {
   label: string;
   /** Hebrew, feminine form, if the wording changes for a woman. */
   labelFemale?: string;
-  /** Shows a text box with this option. Choosing the option makes the text required. */
-  withText?: boolean;
+  /**
+   * A follow-up that appears only when this option is picked, and is then required:
+   * a text box, or a dropdown. Stored beside the answer under followKey().
+   */
+  follow?: { kind: "text" } | { kind: "select"; groups: { label: string; options: Option[] }[] };
 };
 export type Question =
-  | (Base & { kind: "text" })
-  | (Base & { kind: "choice"; options: Option[] }) // exactly one
-  | (Base & { kind: "multi"; options: Option[] }); // any number
+  | (Base & { kind: "text"; campusSocial?: boolean })
+  | (Base & { kind: "choice"; options: Option[]; campusSocial?: boolean }) // exactly one
+  | (Base & { kind: "multi"; options: Option[]; campusSocial?: boolean }); // any number
+// campusSocial: show the Aguda Instagram and WhatsApp links of the student's own campus.
 
 export type Survey = { version: number; questions: Question[] };
+
+/** The HUJI dorms, from the official brochure מעונות תשפ"ו 2025-2026, p. 6. */
+const DORMS = [
+  { label: "הר הצופים", options: [
+    { value: "kfar_hastudentim", label: "כפר הסטודנטים" },
+    { value: "bronfman", label: "ברונפמן (אידלסון)" },
+    { value: "meyersdorf", label: "מאירסדורף (רזניק)" },
+  ] },
+  { label: "קמפוס אדמונד י. ספרא (גבעת רם)", options: [
+    { value: "zweig", label: "צוויג" },
+    { value: "lieberman", label: "ליברמן" },
+  ] },
+  { label: "עין כרם", options: [
+    { value: "boston", label: "בוסטון" },
+    { value: "guatemala", label: "גואטמלה" },
+    { value: "stern", label: "שטרן" },
+  ] },
+  { label: "רחובות", options: [{ value: "rehovot", label: "רחובות" }] },
+];
+
+const YES_NO: Option[] = [
+  { value: "yes", label: "כן" },
+  { value: "no", label: "לא" },
+];
 
 /**
  * The live survey, as supplied by the owner on 2026-10-11.
  * Version 2: singular, gendered wording instead of אתם, and the spelling ליהנות.
+ * Version 3: five more questions.
  */
 export const SURVEY: Survey = {
-  version: 2,
+  version: 3,
   questions: [
     {
       id: "fences",
@@ -50,13 +79,13 @@ export const SURVEY: Survey = {
       options: [
         { value: "disaster", label: "אסון לאומי" },
         { value: "technion", label: "שוקל לעבור לטכניון בגלל זה", labelFemale: "שוקלת לעבור לטכניון בגלל זה" },
-        { value: "other", label: "אחר", withText: true },
+        { value: "other", label: "אחר", follow: { kind: "text" } },
       ],
     },
     {
       id: "father",
       kind: "choice",
-      label: "אבא שלך ערומקול?",
+      label: "אבא שלך ערומקו?",
       required: true,
       options: [{ value: "no", label: "לא" }],
     },
@@ -66,16 +95,66 @@ export const SURVEY: Survey = {
       label: "האם אתה צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
       labelFemale: "האם את צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
       required: true,
+      options: YES_NO,
+    },
+    {
+      id: "dorms",
+      kind: "choice",
+      label: "האם אתה גר במעונות?",
+      labelFemale: "האם את גרה במעונות?",
+      required: true,
       options: [
-        { value: "yes", label: "כן" },
+        { value: "yes", label: "כן", follow: { kind: "select", groups: DORMS } },
         { value: "no", label: "לא" },
       ],
+    },
+    {
+      id: "reserve",
+      kind: "choice",
+      label: "האם אתה משרת מילואים?",
+      labelFemale: "האם את משרתת מילואים?",
+      required: true,
+      options: YES_NO,
+    },
+    {
+      id: "special",
+      kind: "choice",
+      label: "האם אתה מאוכלוסייה מיוחדת?",
+      labelFemale: "האם את מאוכלוסייה מיוחדת?",
+      required: true,
+      options: [
+        { value: "yes", label: "כן", follow: { kind: "text" } },
+        { value: "no", label: "לא" },
+      ],
+    },
+    {
+      id: "social",
+      kind: "choice",
+      label: "האם אתה עוקב אחרי האינסטגרם או הוואטסאפ של האגודה?",
+      labelFemale: "האם את עוקבת אחרי האינסטגרם או הוואטסאפ של האגודה?",
+      required: true,
+      campusSocial: true,
+      options: YES_NO,
+    },
+    {
+      id: "more",
+      kind: "text",
+      label: "משהו נוסף שתרצה לשתף אותנו?",
+      labelFemale: "משהו נוסף שתרצי לשתף אותנו?",
+      required: false,
     },
   ],
 };
 
-/** The form field and the stored answer key for an option's text box. */
-export const textKey = (questionId: string) => `${questionId}_text`;
+/**
+ * Aguda's Instagram and WhatsApp per campus, keyed by students.campus exactly as the
+ * university list spells it. The owner supplies these. A campus with no entry shows no link.
+ */
+export const CAMPUS_SOCIAL: Record<string, { instagram?: string; whatsapp?: string }> = {};
+
+/** The form field and the stored key of an option's follow-up: <id>_text or <id>_choice. */
+export const followKey = (questionId: string, follow: NonNullable<Option["follow"]>) =>
+  `${questionId}_${follow.kind === "text" ? "text" : "choice"}`;
 
 export type Answers = Record<string, string | string[]>;
 const MAX_TEXT = 1000;
@@ -107,14 +186,18 @@ export function validate(
         if (q.required) errors[q.id] = "required";
       } else {
         answers[q.id] = q.kind === "choice" ? values[0] : [...new Set(values)];
-        // An option with a text box, such as "אחר": once chosen, its text is required.
-        // The text of an option that was not chosen is ignored.
-        if (q.options.some((o) => o.withText && values.includes(o.value))) {
-          const raw = body[textKey(q.id)];
-          const text = typeof raw === "string" ? raw.trim() : "";
-          if (!text) errors[q.id] = "required";
-          else if (text.length > MAX_TEXT) errors[q.id] = "invalid";
-          else answers[textKey(q.id)] = text;
+        // A follow-up, such as the "אחר" text or the dorms dropdown: required once its
+        // option is chosen. The follow-up of an option that was not chosen is dropped.
+        for (const o of q.options) {
+          if (!o.follow || !values.includes(o.value)) continue;
+          const key = followKey(q.id, o.follow);
+          const raw = body[key];
+          const value = typeof raw === "string" ? raw.trim() : "";
+          if (!value) errors[q.id] = "required";
+          else if (o.follow.kind === "text" && value.length > MAX_TEXT) errors[q.id] = "invalid";
+          else if (o.follow.kind === "select" && !o.follow.groups.some((g) => g.options.some((x) => x.value === value))) {
+            errors[q.id] = "invalid";
+          } else answers[key] = value;
         }
       }
     }
