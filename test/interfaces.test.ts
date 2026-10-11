@@ -4,6 +4,7 @@ import { after, beforeEach, describe, test } from "node:test";
 import type { GoogleLogin } from "../src/auth.ts";
 import { pool } from "../src/db.ts";
 import { markTaken, selectGift } from "../src/gifts.ts";
+import { migrate } from "../src/migrate.ts";
 import { GIFTS } from "../src/seed.ts";
 import { buildApp } from "../src/server.ts";
 import { freshDatabase, gift, loadStudents, setMember, student } from "./helpers.ts";
@@ -39,12 +40,11 @@ let ids: string[];
 beforeEach(async () => {
   await freshDatabase(5);
   ids = await loadStudents(10, 8); // students 0-7 are members, 8-9 are not
-  await pool.query("INSERT INTO workers (email) VALUES ('dana@aguda.org.il')");
+  await pool.query("INSERT INTO staff (email, role) VALUES ('dana@aguda.org.il', 'worker'), ('boss@aguda.org.il', 'manager')");
   app = await buildApp({
     google: noGoogle,
     sessionSecret: "test-secret-test-secret-test-secret",
     domains: { student: ["mail.huji.ac.il"], staff: ["mail.huji.ac.il", "aguda.org.il"] },
-    managers: ["boss@aguda.org.il"],
     devLogin: true,
     production: false,
     origin: ORIGIN,
@@ -227,7 +227,8 @@ describe("staff page", () => {
 // ---- manager (request 24) ---------------------------------------------------------------
 
 describe("manager page", () => {
-  const workers = async () => (await pool.query("SELECT email FROM workers ORDER BY email")).rows.map((r) => r.email);
+  const workers = async () =>
+    (await pool.query("SELECT email FROM staff WHERE role = 'worker' ORDER BY email")).rows.map((r) => r.email);
   const notice = async (location: string, cookies: { session: string }) =>
     (await app.inject({ url: location, cookies })).body.match(/<p class="(?:ok|error)">([^<]*(?:<bdi[^>]*>[^<]*<\/bdi>[^<]*)?)<\/p>/)?.[1];
 
@@ -254,6 +255,19 @@ describe("manager page", () => {
     assert.deepEqual(await workers(), ["dana@aguda.org.il"]);
   });
 
+  test("the migration moves workers from the first version's table into staff", async () => {
+    await pool.query("CREATE TABLE workers (email text PRIMARY KEY); INSERT INTO workers VALUES ('old@aguda.org.il')");
+    await migrate();
+    assert.equal((await pool.query("SELECT role FROM staff WHERE email = 'old@aguda.org.il'")).rows[0].role, "worker");
+    assert.equal((await pool.query("SELECT to_regclass('workers') AS t")).rows[0].t, null);
+  });
+
+  test("the manager page cannot remove a manager", async () => {
+    const res = await app.inject({ method: "POST", url: "/manager/workers/remove", cookies: await asManager(), ...form({ email: "boss@aguda.org.il" }) });
+    assert.equal(res.headers.location, "/manager?error=not_found");
+    assert.equal((await pool.query("SELECT role FROM staff WHERE email = 'boss@aguda.org.il'")).rows[0].role, "manager");
+  });
+
   test("a manager removes a worker, and the worker is locked out at once", async () => {
     const worker = await asStaff();
     const res = await app.inject({ method: "POST", url: "/manager/workers/remove", cookies: await asManager(), ...form({ email: "dana@aguda.org.il" }) });
@@ -262,11 +276,11 @@ describe("manager page", () => {
     assert.equal((await app.inject({ url: "/staff", cookies: worker })).headers.location, "/staff/login?error=not_staff");
   });
 
-  test("the manager page lists workers, managers, and each gift's stock", async () => {
+  test("the manager page lists all the staff with their roles, and each gift's stock", async () => {
     const res = await app.inject({ url: "/manager", cookies: await asManager() });
     assert.equal(res.statusCode, 200);
-    assert.match(res.body, /dana@aguda\.org\.il/);
-    assert.match(res.body, /boss@aguda\.org\.il/);
+    assert.match(res.body, /boss@aguda\.org\.il<\/bdi><\/td><td>מנהל<\/td><td><\/td>/, "a manager has no remove button");
+    assert.match(res.body, /dana@aguda\.org\.il<\/bdi><\/td><td>עובד<\/td><td><form[^>]*workers\/remove/);
     assert.equal(res.body.split('action="/manager/stock"').length - 1, 4);
     assert.equal(res.headers["cache-control"], "no-store");
   });

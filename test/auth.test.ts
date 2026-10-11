@@ -8,7 +8,6 @@ import { freshDatabase, loadStudents, student } from "./helpers.ts";
 after(() => pool.end());
 
 const domains = { student: ["mail.huji.ac.il"], staff: ["mail.huji.ac.il", "aguda.org.il"] };
-const managers = ["boss@aguda.org.il"];
 
 // ---- the pure decision (plan §2) ------------------------------------------------------
 
@@ -65,7 +64,6 @@ async function app(result: Claims | Error, extra: { devLogin?: boolean } = {}) {
     google,
     sessionSecret: "test-secret-test-secret-test-secret",
     domains,
-    managers,
     devLogin: extra.devLogin ?? false,
     production: false,
     origin: "http://localhost:3000",
@@ -95,13 +93,14 @@ const sessionOf = (res: { cookies: { name: string; value: string }[] }) =>
   res.cookies.find((c) => c.name === "session" && c.value)?.value;
 
 const boss = { email: "boss@aguda.org.il", email_verified: true, hd: "aguda.org.il" };
-const addWorker = (email: string) => pool.query("INSERT INTO workers (email) VALUES ($1)", [email]);
+const addWorker = (email: string) => pool.query("INSERT INTO staff (email, role) VALUES ($1, 'worker')", [email]);
 
 describe("login flow", () => {
   let ids: string[];
   beforeEach(async () => {
     await freshDatabase();
     ids = await loadStudents(3, 2);
+    await pool.query("INSERT INTO staff (email, role) VALUES ('boss@aguda.org.il', 'manager')");
   });
 
   test("the student login page is the default, and links to the staff login page", async () => {
@@ -142,7 +141,7 @@ describe("login flow", () => {
     assert.ok(page.body.includes(s.first_name));
   });
 
-  test("a manager from MANAGERS gets a staff session with the manager link", async () => {
+  test("a manager from the staff table gets a staff session with the manager link", async () => {
     const { app: a } = await app(boss);
     const res = await googleFlow(a, { door: "staff" });
     assert.equal(res.headers.location, "/staff");
@@ -245,7 +244,7 @@ describe("login flow", () => {
     const cookies = { session: sessionOf(await googleFlow(a, { door: "staff" }))! };
     assert.equal((await a.inject({ url: "/staff", cookies })).statusCode, 200);
 
-    await pool.query("DELETE FROM workers");
+    await pool.query("DELETE FROM staff WHERE role = 'worker'");
     const res = await a.inject({ url: "/staff", cookies });
     assert.equal(res.headers.location, "/staff/login?error=not_staff");
     assert.equal(res.cookies.find((c) => c.name === "session")?.value, "", "the session is cleared");

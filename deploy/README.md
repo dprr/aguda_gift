@@ -28,7 +28,13 @@ bash /home/opc/aguda/app/deploy/server.sh status
 bash /home/opc/aguda/app/deploy/server.sh logs 100
 bash /home/opc/aguda/app/deploy/server.sh stop
 bash /home/opc/aguda/app/deploy/server.sh start
+bash /home/opc/aguda/app/deploy/server.sh staff                          # list the staff
+bash /home/opc/aguda/app/deploy/server.sh staff manager someone@aguda.org.il
+bash /home/opc/aguda/app/deploy/server.sh staff remove someone@aguda.org.il
 ```
+
+Managers add and remove workers on `/manager`. Only the `staff` command adds or removes a
+manager, so run it once to add the first manager.
 
 ⚠️ **Nothing starts after a reboot.** There is no system service, by the owner's choice.
 After every reboot of the server, run `start`.

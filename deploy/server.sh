@@ -142,5 +142,6 @@ case "${1:-}" in
     pid="$(app_pid || true)"; [ -n "$pid" ] && echo "app: running, pid $pid" || echo "app: stopped"
     ;;
   logs) tail -n "${2:-50}" "$LOGS/app.log" ;;
-  *) echo "usage: $0 deploy | start | stop | status | logs [lines]"; exit 1 ;;
+  staff) shift; node_run src/staff.ts "$@" ;; # list, or: manager <email> | remove <email>
+  *) echo "usage: $0 deploy | start | stop | status | logs [lines] | staff [manager|remove <email>]"; exit 1 ;;
 esac

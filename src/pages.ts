@@ -139,10 +139,10 @@ export const T = {
   manager: {
     title: "ניהול",
     back: "חזור לעמדת החלוקה",
-    managers: "מנהלים",
-    managersHint: "רשימת המנהלים נמצאת בהגדרות השרת. פנה למפתח כדי לשנות אותה.",
-    workers: "עובדים",
-    noWorkers: "עדיין לא הוספת עובדים.",
+    staff: "צוות",
+    staffCols: ["דוא\"ל", "תפקיד", ""],
+    roles: { manager: "מנהל", worker: "עובד" },
+    managersHint: "כדי להוסיף מנהל או להסיר מנהל, פנה למפתח.",
     newWorker: "כתובת דוא\"ל של עובד חדש, בחשבון של האוניברסיטה או של האגודה",
     add: "הוסף",
     remove: "הסר",
@@ -576,24 +576,27 @@ ${result}
 
 export function managerPage(options: {
   email: string;
-  managers: string[];
-  workers: string[];
+  staff: { email: string; role: "manager" | "worker" }[];
   gifts: GiftView[];
   message?: Notice;
 }): string {
-  const { email, managers, workers, gifts, message } = options;
+  const { email, staff, gifts, message } = options;
   const M = T.manager;
 
-  const workerRows = workers.length
-    ? `<table><tbody>${workers
-        .map(
-          (w) => `<tr><td>${ltr(w)}</td><td><form method="post" action="/manager/workers/remove">
-  <input type="hidden" name="email" value="${esc(w)}">
+  // Request 25: one list of all the staff, with each person's role. Only a worker has a
+  // remove button; managers change from the command line.
+  const staffRows = staff
+    .map(
+      (m) => `<tr><td>${ltr(m.email)}</td><td>${M.roles[m.role]}</td><td>${
+        m.role === "worker"
+          ? `<form method="post" action="/manager/workers/remove">
+  <input type="hidden" name="email" value="${esc(m.email)}">
   <button class="button secondary small">${M.remove}</button>
-</form></td></tr>`,
-        )
-        .join("")}</tbody></table>`
-    : `<p class="hint">${M.noWorkers}</p>`;
+</form>`
+          : ""
+      }</td></tr>`,
+    )
+    .join("");
 
   const stockRows = gifts
     .map(
@@ -610,8 +613,9 @@ export function managerPage(options: {
     `<div class="bar"><h1>${M.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
 <p><a href="/staff">${M.back}</a></p>
 ${notice(message)}
-<section><h2>${M.workers}</h2>
-${workerRows}
+<section><h2>${M.staff}</h2>
+<table><thead><tr>${M.staffCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${staffRows}</tbody></table>
+<p class="hint">${M.managersHint}</p>
 <form method="post" action="/manager/workers/add">
   <label>${M.newWorker}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
   <button class="button">${M.add}</button>
@@ -620,10 +624,6 @@ ${workerRows}
 <section><h2>${M.stock}</h2>
 <p class="hint">${M.stockHint}</p>
 <table><thead><tr>${M.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
-</section>
-<section><h2>${M.managers}</h2>
-<ul>${managers.map((m) => `<li>${ltr(m)}</li>`).join("")}</ul>
-<p class="hint">${M.managersHint}</p>
 </section>`,
     true,
   );

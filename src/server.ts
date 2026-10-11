@@ -10,7 +10,7 @@ import { markTaken, selectGift } from "./gifts.ts";
 import { confirmPage, demoBanner, esc, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
-import { addWorker, listWorkers, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
+import { addWorker, listStaff, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 
@@ -29,8 +29,6 @@ export type AppOptions = {
   demo?: boolean;
   /** Request 22. Defaults to the live SURVEY; tests pass their own. */
   survey?: Survey;
-  /** Request 24. Manager emails, from MANAGERS. Workers live in the `workers` table. */
-  managers?: string[];
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
   origin: string;
 };
@@ -105,7 +103,6 @@ export async function buildApp(options: AppOptions) {
     }
   }
 
-  const managers = (options.managers ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean);
   const loginUrl = (door: Door) => (door === "staff" ? "/staff/login" : "/");
   const refuse = (reply: FastifyReply, reason: RefusalReason, door: Door = "student") =>
     reply.redirect(`${loginUrl(door)}?error=${reason}`);
@@ -194,7 +191,7 @@ export async function buildApp(options: AppOptions) {
       if (decision.kind === "refused") return refuse(reply, decision.reason, door);
 
       if (door === "staff") {
-        if (!(await roleOf(decision.email, managers))) return refuse(reply, "not_staff", "staff");
+        if (!(await roleOf(decision.email))) return refuse(reply, "not_staff", "staff");
         setSession(reply, { kind: "staff", email: decision.email });
         return reply.redirect("/staff");
       }
@@ -223,7 +220,7 @@ export async function buildApp(options: AppOptions) {
         }
         // Staff skip Google here, but never the staff list.
         const address = email?.trim().toLowerCase() ?? "";
-        if (kind === "staff" && address && (await roleOf(address, managers))) {
+        if (kind === "staff" && address && (await roleOf(address))) {
           setSession(reply, { kind: "staff", email: address });
           return reply.redirect("/staff");
         }
@@ -259,7 +256,7 @@ export async function buildApp(options: AppOptions) {
       const session = readSession(request);
       if (!session) return reply.redirect("/staff/login");
       if (session.kind !== "staff") return reply.code(403).send("Forbidden");
-      const role = await roleOf(session.email, managers);
+      const role = await roleOf(session.email);
       if (!role) {
         reply.clearCookie(SESSION_COOKIE, { path: "/" });
         return refuse(reply, "not_staff", "staff");
@@ -409,8 +406,7 @@ export async function buildApp(options: AppOptions) {
       }
       return html(reply, managerPage({
         email: staffEmail(request),
-        managers,
-        workers: await listWorkers(),
+        staff: await listStaff(),
         gifts: await listGifts(),
         message,
       }));
@@ -421,7 +417,7 @@ export async function buildApp(options: AppOptions) {
     "/manager/workers/add",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      const result = await addWorker(request.body?.email ?? "", options.domains.staff, managers);
+      const result = await addWorker(request.body?.email ?? "", options.domains.staff);
       return reply.redirect(result.ok ? "/manager?done=added" : `/manager?error=${result.reason}`);
     },
   );
@@ -472,15 +468,15 @@ if (import.meta.main) {
     }),
     sessionSecret: env("SESSION_SECRET"),
     domains: { student: list("STUDENT_DOMAINS", "mail.huji.ac.il"), staff: list("STAFF_DOMAINS", "mail.huji.ac.il,aguda.org.il") },
-    managers: list("MANAGERS", "").filter(Boolean),
     devLogin: process.env.DEV_LOGIN === "1",
     demo: process.env.DEMO === "1",
     production: process.env.NODE_ENV === "production",
     origin: new URL(baseUrl).origin,
   });
 
-  if (!process.env.MANAGERS?.trim()) {
-    console.log("MANAGERS is empty: nobody can open the manager page or add workers");
+  const managerCount = await pool.query("SELECT count(*)::int AS n FROM staff WHERE role = 'manager'");
+  if (managerCount.rows[0].n === 0) {
+    console.log("no manager in the staff table: nobody can add workers. Run: npm run staff -- manager <email>");
   }
 
   // Request 11: the periodic sync. Off unless SYNC_SOURCE is set.
