@@ -401,6 +401,9 @@ was drawn a moment before the last unit went.
 
 ### 5.2 An employee marks the gift as taken — a guarded write
 
+Request 26: the student can also mark it, from the student page, after a confirm step.
+Both paths call the same `markTaken()`, so every rule below holds for both.
+
 ```sql
 BEGIN;
   UPDATE students
@@ -658,7 +661,7 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | §3.4 Sync run records | The worker logs. No table | A `sync_runs` table with counts and errors |
 | §4.6 Interaction history beyond the gift | `students.interactions` holds gift collections. Merchandise and Kossel have no write path, because no interface was requested | A screen for each new interaction type. The array already accepts them |
 | §9 Audit log | Not built | An `audit_log` table |
-| §7.5 Student receipt confirmation | Not built | A `student_confirmed_at` column |
+| Who marked a handout: the student or a desk | Not recorded. Request 26 and the desk write the same entry | A `by` field in the `gift_collection` interaction |
 | §4.5 Membership periods | `membership_history` holds the change list requested in request 13 | A view over the array with `lead()` |
 
 ### Edge cases
@@ -711,6 +714,7 @@ document is a wish list, and a section in it is not a request.
 | 23 | The 4 gifts are the backpack, the thermal cup, the laptop stand, and the lunch bag, each shown with its photo from `img/` |
 | 24 | Two login pages: students (the default) and staff. Staff are managers or workers, with a `mail.huji.ac.il` or an `aguda.org.il` account. Managers add and remove workers, and edit the gift stock. All students have `mail.huji.ac.il` accounts |
 | 25 | One `staff` table lists every employee, and marks each one as a manager or a worker |
+| 26 | After the survey and the selection, the student can mark the gift as received. This does exactly what the desk's "mark as taken" does |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

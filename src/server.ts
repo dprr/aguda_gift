@@ -7,7 +7,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, type Door, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
 import { markTaken, selectGift } from "./gifts.ts";
-import { confirmPage, demoBanner, esc, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
+import { confirmPage, demoBanner, esc, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { addWorker, listStaff, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
@@ -282,7 +282,7 @@ export async function buildApp(options: AppOptions) {
   // Every student route acts on the session's own national ID, never on one from the
   // request (plan §6: a student reads and writes only its own row).
 
-  app.get<{ Querystring: { saved?: string; error?: string; surveyed?: string } }>(
+  app.get<{ Querystring: { saved?: string; error?: string; surveyed?: string; received?: string } }>(
     "/student",
     { preHandler: requireStudent },
     async (request, reply) => {
@@ -294,9 +294,10 @@ export async function buildApp(options: AppOptions) {
       // Request 22: member or not, the survey comes first.
       if (!s.survey_submitted) return html(reply, surveyPage(s, survey));
 
-      const { saved, error, surveyed } = request.query;
+      const { saved, error, surveyed, received } = request.query;
       let message: Notice | undefined;
       if (surveyed) message = { kind: "ok", text: T.survey.thanks };
+      else if (received && s.gift_taken_at) message = { kind: "ok", text: T.student.receivedSaved };
       else if (saved) message = { kind: "ok", text: T.student.saved };
       else if (error && error in T.student.errors) {
         message = { kind: "error", text: studentErrorText(error as StudentError, s.gender) };
@@ -325,6 +326,21 @@ export async function buildApp(options: AppOptions) {
       return reply.redirect(result.ok ? "/student?saved=1" : `/student?error=${result.reason}`);
     },
   );
+
+  // Request 26: the student marks the gift as received. The same markTaken() as the desk,
+  // so the same rules hold: a member, with a selection, not yet collected. Only a member
+  // with an open selection sees the button; any other case returns to the student page,
+  // which already explains the state.
+  app.get("/student/received", { preHandler: requireStudent }, async (request, reply) => {
+    const s = await findStudent(studentId(request));
+    if (!s || s.gift_id === null || s.gift_taken_at || s.member !== true) return reply.redirect("/student");
+    return html(reply, receivedConfirmPage(s));
+  });
+
+  app.post("/student/received", { preHandler: requireStudent }, async (request, reply) => {
+    const result = await markTaken(studentId(request));
+    return reply.redirect(result.ok ? "/student?received=1" : "/student");
+  });
 
   app.post<{ Body: Record<string, unknown> }>(
     "/student/survey",

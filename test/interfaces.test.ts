@@ -141,6 +141,54 @@ describe("student page", () => {
     assert.match(res.body, /קיבלת את המתנה/);
   });
 
+  test("a student marks the gift as received, which counts as a handout (request 26)", async () => {
+    await selectGift(ids[0], 2);
+    const cookies = await asStudent(ids[0]);
+    const page = await app.inject({ url: "/student", cookies });
+    assert.match(page.body, /href="\/student\/received">סמן שקיבלת את המתנה/);
+
+    const confirm = await app.inject({ url: "/student/received", cookies });
+    assert.match(confirm.body, /action="\/student\/received"/);
+    assert.equal((await student(ids[0])).gift_taken_at, null, "the confirm page changes nothing");
+
+    const post = await app.inject({ method: "POST", url: "/student/received", cookies });
+    assert.equal(post.headers.location, "/student?received=1");
+    const s = await student(ids[0]);
+    assert.ok(s.gift_taken_at);
+    assert.deepEqual(s.interactions.map((i: { type: string; gift_id: number }) => [i.type, i.gift_id]), [["gift_collection", 2]]);
+    assert.equal((await gift(2)).given_count, 1);
+    assert.match((await app.inject({ url: post.headers.location as string, cookies })).body, /שמרנו שקיבלת את המתנה/);
+
+    // A second click, and then the desk: neither counts it again.
+    await app.inject({ method: "POST", url: "/student/received", cookies });
+    const desk = await app.inject({ method: "POST", url: "/staff/take", cookies: await asStaff(), ...form({ national_id: ids[0] }) });
+    assert.match(desk.body, /class="(?:warn|error)"/);
+    assert.equal((await gift(2)).given_count, 1);
+  });
+
+  test("no received button, and no effect, without an open selection or as a lapsed member", async () => {
+    await selectGift(ids[1], 1);
+    await setMember(ids[1], false);
+    for (const id of [ids[0], ids[1]]) { // ids[0]: no selection; ids[1]: lapsed
+      const cookies = await asStudent(id);
+      assert.doesNotMatch((await app.inject({ url: "/student", cookies })).body, /\/student\/received/);
+      assert.equal((await app.inject({ url: "/student/received", cookies })).headers.location, "/student");
+      assert.equal((await app.inject({ method: "POST", url: "/student/received", cookies })).headers.location, "/student");
+      assert.equal((await student(id)).gift_taken_at, null);
+    }
+    assert.equal((await gift(1)).given_count, 0);
+  });
+
+  test("the received button and its confirm page use the feminine form for a woman", async () => {
+    await selectGift(ids[0], 1);
+    await pool.query("UPDATE students SET gender = 'נקבה' WHERE national_id = $1", [ids[0]]);
+    const cookies = await asStudent(ids[0]);
+    assert.match((await app.inject({ url: "/student", cookies })).body, /סמני שקיבלת את המתנה/);
+    const confirm = (await app.inject({ url: "/student/received", cookies })).body;
+    assert.match(confirm, /אשרי שקיבלת את המתנה/);
+    assert.match(confirm, /לא תוכלי לבטל/);
+  });
+
   test("a student can only act for itself: a national ID in the request is ignored", async () => {
     const cookies = await asStudent(ids[0]);
     await app.inject({ method: "POST", url: "/student/select", cookies, ...form({ gift_id: "1", national_id: ids[1] }) });

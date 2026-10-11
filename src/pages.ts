@@ -66,6 +66,15 @@ export const T = {
     collectHint: "אסוף את המתנה בעמדת חלוקה של האגודה, והבא תעודת סטודנט.",
     collectHintFemale: "אספי את המתנה בעמדת חלוקה של האגודה, והביאי תעודת סטודנט.",
     received: "קיבלת את המתנה",
+    /** Request 26: the student marks the gift as received, as the desk would. */
+    markReceived: "סמן שקיבלת את המתנה",
+    markReceivedFemale: "סמני שקיבלת את המתנה",
+    receivedTitle: "אישור קבלת המתנה",
+    receivedWarn: "סמן רק אחרי שקיבלת את המתנה בידיים. אחרי האישור לא תוכל לבטל את הסימון, ועמדת חלוקה לא תמסור לך את המתנה.",
+    receivedWarnFemale: "סמני רק אחרי שקיבלת את המתנה בידיים. אחרי האישור לא תוכלי לבטל את הסימון, ועמדת חלוקה לא תמסור לך את המתנה.",
+    confirmReceived: "אשר שקיבלת את המתנה",
+    confirmReceivedFemale: "אשרי שקיבלת את המתנה",
+    receivedSaved: "שמרנו שקיבלת את המתנה.",
     lapsed: "החברות שלך באגודה אינה פעילה כרגע. כדי לקבל את המתנה, חדש את החברות.",
     lapsedFemale: "החברות שלך באגודה אינה פעילה כרגע. כדי לקבל את המתנה, חדשי את החברות.",
     saved: "שמרנו את הבחירה.",
@@ -359,7 +368,8 @@ ${notice(message)}`;
     return layout(`${head}
 <div class="card"><p>${T.student.yourGift}</p><p class="big">${esc(s.gift_name)}</p>
 <p class="hint">${f ? T.student.chooseHintFemale : T.student.chooseHint}</p>${lapsed}
-<p>${f ? T.student.collectHintFemale : T.student.collectHint}</p></div>`);
+<p>${f ? T.student.collectHintFemale : T.student.collectHint}</p>
+${s.member === true ? `<a class="button secondary" href="/student/received">${f ? T.student.markReceivedFemale : T.student.markReceived}</a>` : ""}</div>`);
   }
 
   // No selection, and not a member: nothing to choose.
@@ -477,6 +487,21 @@ ${fields}
 /** The gift's photo, if it has one. The name beside it serves as the text alternative. */
 const photo = (g: GiftView, cls = "") =>
   g.image ? `<img${cls ? ` class="${cls}"` : ""} src="/img/${encodeURIComponent(g.image)}" alt="" loading="lazy">` : "";
+
+/**
+ * Request 26. The student marks the gift as received. It cannot be undone, and it stops
+ * the desk from handing the gift over, so it takes a second, explicit step.
+ */
+export function receivedConfirmPage(s: StudentView): string {
+  const f = isFemale(s.gender);
+  return layout(`<h1>${T.student.receivedTitle}</h1>
+<p class="big">${esc(s.gift_name)}</p>
+<p class="warn">${f ? T.student.receivedWarnFemale : T.student.receivedWarn}</p>
+<form method="post" action="/student/received">
+  <button class="button">${f ? T.student.confirmReceivedFemale : T.student.confirmReceived}</button>
+</form>
+<a class="button secondary" href="/student">${f ? T.student.backFemale : T.student.back}</a>`);
+}
 
 /** The selection is final (request 3), so it takes a second, explicit step. */
 export function confirmPage(gift: GiftView, gender: string | null): string {
