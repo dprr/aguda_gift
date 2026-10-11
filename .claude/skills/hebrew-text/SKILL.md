@@ -49,10 +49,16 @@ that student's gender. So these texts must follow it:
 - Many second-person verbs are spelled the same for both: בחרת, קיבלת, אינך. They need no
   pair.
 
-## Active voice, always. Never an impersonal instruction
+## Prefer the active voice. Never an impersonal instruction
 
-The owner's rule. Tell the person what to do, in the active imperative. Never use
-impersonal forms such as יש ל…, אין ל…, נא ל…, אפשר ל…, or אי אפשר, and never the passive.
+The owner's rule, in two parts:
+
+1. **Never an impersonal instruction.** Tell the person what to do, in the imperative.
+   Never use יש ל…, אין ל…, נא ל…, אפשר ל…, or אי אפשר. No exceptions.
+2. **Prefer the active voice over the passive.** The passive is acceptable when there is a
+   good reason, for example when the actor is unknown or does not matter, or when the
+   active form would make a short label or button long or unclear. "סמן כנמסרה" keeps
+   its passive for that reason. Without such a reason, write the active form.
 
 | Never write | Man, or gender unknown | Woman |
 |---|---|---|
@@ -70,8 +76,8 @@ impersonal forms such as יש ל…, אין ל…, נא ל…, אפשר ל…, o
   person plural: שמרנו, לא מצאנו.
 - "אין לנו מידע" and "יש לך" are allowed. A pronoun after ל is possession, not an
   instruction.
-- `test/hebrew-text.test.ts` fails on any impersonal form in `src/`. It cannot detect the
-  passive, so check for passive verbs yourself.
+- `test/hebrew-text.test.ts` fails on any impersonal form in `src/`. It does not check the
+  passive, because the passive is sometimes right. Judge each passive verb yourself.
 
 ## Address one student, in the singular
 
