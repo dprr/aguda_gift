@@ -146,11 +146,34 @@ export const SURVEY: Survey = {
   ],
 };
 
+export type Social = { instagram?: string; whatsapp?: string };
+
+/** Aguda's general links, shown to every student. Supplied by the owner on 2026-10-11. */
+export const AGUDA_SOCIAL: Social = {
+  instagram: "https://www.instagram.com/huji_aguda/",
+  whatsapp: "https://chat.whatsapp.com/LDsyY8tCWl606fSQbVK0tJ",
+};
+
 /**
- * Aguda's Instagram and WhatsApp per campus, keyed by students.campus exactly as the
- * university list spells it. The owner supplies these. A campus with no entry shows no link.
+ * Each campus's own links, keyed by students.campus exactly as the university list spells
+ * it. ⚠️ The keys match the fake data; confirm them against the real list (M6). A campus
+ * with an entry but no WhatsApp shows a note inviting the student to start a group.
  */
-export const CAMPUS_SOCIAL: Record<string, { instagram?: string; whatsapp?: string }> = {};
+export const CAMPUS_SOCIAL: Record<string, Social> = {
+  "גבעת רם": {
+    instagram: "https://www.instagram.com/aguda.givatram/",
+    whatsapp: "https://agudagivatram.org/agudaupdates", // redirects to the group
+  },
+  "הר הצופים": { instagram: "https://www.instagram.com/aguda.har/" },
+  "רחובות": {
+    instagram: "https://www.instagram.com/hafakulta/",
+    whatsapp: "https://api.whatsapp.com/send?phone=972559500921",
+  },
+  "עין כרם": {
+    instagram: "https://www.instagram.com/aguda.hujimed/",
+    whatsapp: "https://wa.me/972555660388",
+  },
+};
 
 /** The form field and the stored key of an option's follow-up: <id>_text or <id>_choice. */
 export const followKey = (questionId: string, follow: NonNullable<Option["follow"]>) =>

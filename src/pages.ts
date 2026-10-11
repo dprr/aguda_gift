@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
-import { CAMPUS_SOCIAL, followKey, type Option, type Question, type Survey } from "./survey.ts";
+import { AGUDA_SOCIAL, CAMPUS_SOCIAL, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -69,8 +69,13 @@ export const T = {
     thanks: "תודה. התשובות נשמרו.",
     pick: "בחר",
     pickFemale: "בחרי",
+    instagramAll: "האינסטגרם של האגודה",
+    whatsappAll: "הוואטסאפ של האגודה",
     instagram: "האינסטגרם של האגודה בקמפוס",
     whatsapp: "הוואטסאפ של האגודה בקמפוס",
+    noWhatsapp: "אין קבוצת וואטסאפ בקמפוס",
+    startOne: "הקם אחת בעצמך.",
+    startOneFemale: "הקימי אחת בעצמך.",
   },
 
   staff: {
@@ -314,15 +319,31 @@ export function surveyPage(
     return ` <select class="follow" name="${esc(key)}"><option value="">${female ? T.survey.pickFemale : T.survey.pick}</option>${groups}</select>`;
   };
 
-  /** The Aguda links of the student's own campus. Nothing if the campus has none. */
+  /**
+   * Aguda's general links for everyone, then the links of the student's own campus. A
+   * campus listed without WhatsApp invites the student to start a group.
+   */
   const links = (q: Question): string => {
-    if (!q.campusSocial || !s.campus) return "";
-    const c = CAMPUS_SOCIAL[s.campus];
-    if (!c) return "";
+    if (!q.campusSocial) return "";
     const a = (href: string, text: string) =>
-      `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text} ${esc(s.campus)}</a>`;
-    const parts = [c.instagram && a(c.instagram, T.survey.instagram), c.whatsapp && a(c.whatsapp, T.survey.whatsapp)].filter(Boolean);
-    return parts.length ? `<p class="hint">${parts.join(" · ")}</p>` : "";
+      `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    const line = (parts: (string | false | undefined)[]) => {
+      const kept = parts.filter(Boolean);
+      return kept.length ? `<p class="hint">${kept.join(" · ")}</p>` : "";
+    };
+    const all: Social = AGUDA_SOCIAL;
+    let out = line([all.instagram && a(all.instagram, T.survey.instagramAll), all.whatsapp && a(all.whatsapp, T.survey.whatsappAll)]);
+    const c = s.campus ? CAMPUS_SOCIAL[s.campus] : undefined;
+    if (c) {
+      const campus = esc(s.campus);
+      out += line([
+        c.instagram && a(c.instagram, `${T.survey.instagram} ${campus}`),
+        c.whatsapp
+          ? a(c.whatsapp, `${T.survey.whatsapp} ${campus}`)
+          : `${T.survey.noWhatsapp} ${campus}. ${female ? T.survey.startOneFemale : T.survey.startOne}`,
+      ]);
+    }
+    return out;
   };
 
   const fields = survey.questions

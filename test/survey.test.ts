@@ -251,28 +251,34 @@ describe("the five questions of version 3", () => {
     assert.equal(new Set(values).size, 9);
   });
 
-  test("the dropdown and the campus links render; links only for a configured campus", async () => {
-    const { CAMPUS_SOCIAL } = await import("../src/survey.ts");
+  test("the dropdown, the general links, and each campus's own links render", async () => {
     const live = await buildApp({
       google: noGoogle, sessionSecret: "s".repeat(32), domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
       devLogin: true, production: false, origin: ORIGIN,
     });
-    await pool.query("UPDATE students SET campus = 'הר הצופים' WHERE national_id = $1", [ids[0]]);
-    await pool.query("UPDATE students SET campus = 'רחובות' WHERE national_id = $1", [ids[1]]);
-    CAMPUS_SOCIAL["הר הצופים"] = { instagram: "https://instagram.com/test", whatsapp: "https://chat.whatsapp.com/test" };
-    try {
-      const page = async (id: string) => {
-        const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
-        return (await live.inject({ url: "/student", cookies: { session: r.cookies.find((c) => c.name === "session")!.value } })).body;
-      };
-      const scopus = await page(ids[0]);
-      assert.match(scopus, /<select class="follow" name="dorms_choice">/);
-      assert.match(scopus, /<optgroup label="עין כרם">/);
-      assert.match(scopus, /href="https:\/\/instagram.com\/test" target="_blank" rel="noopener noreferrer"/);
-      assert.match(scopus, /href="https:\/\/chat.whatsapp.com\/test"/);
-      assert.doesNotMatch(await page(ids[1]), /instagram.com/, "no links for a campus with none configured");
-    } finally {
-      delete CAMPUS_SOCIAL["הר הצופים"];
+    const set = (id: string, campus: string | null, gender: string | null) =>
+      pool.query("UPDATE students SET campus = $2, gender = $3 WHERE national_id = $1", [id, campus, gender]);
+    await set(ids[0], "הר הצופים", "נקבה");
+    await set(ids[1], "רחובות", "זכר");
+    await set(ids[2], null, "זכר");
+    const page = async (id: string) => {
+      const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
+      return (await live.inject({ url: "/student", cookies: { session: r.cookies.find((c) => c.name === "session")!.value } })).body;
+    };
+    const scopus = await page(ids[0]);
+    const rehovot = await page(ids[1]);
+    const unknown = await page(ids[2]);
+
+    assert.match(scopus, /<select class="follow" name="dorms_choice">/);
+    for (const html of [scopus, rehovot, unknown]) {
+      assert.match(html, /instagram.com\/huji_aguda/, "general Instagram for everyone");
+      assert.match(html, /chat.whatsapp.com\/LDsyY8tCWl606fSQbVK0tJ/, "general WhatsApp for everyone");
     }
+    assert.match(scopus, /instagram.com\/aguda.har/);
+    assert.match(scopus, /אין קבוצת וואטסאפ בקמפוס הר הצופים. הקימי אחת בעצמך./, "female form");
+    assert.match(rehovot, /instagram.com\/hafakulta/);
+    assert.match(rehovot, /phone=972559500921/);
+    assert.doesNotMatch(unknown, /בקמפוס/, "no campus line when the campus is unknown");
+    assert.match(scopus, /target="_blank" rel="noopener noreferrer"/);
   });
 });
