@@ -16,8 +16,24 @@ export const T = {
   devStudent: "כניסה כסטודנט, לפי מספר זהות",
   devStaff: "כניסה כצוות, לפי כתובת דוא\"ל",
   devGo: "היכנס",
+  /** Request 24: the student login page links to the staff login page, and back. */
+  staffLink: "עובד באגודה? היכנס כאן",
+  studentLink: "סטודנט? היכנס כאן",
+  staffLoginTitle: "כניסת צוות",
+  staffSignIn: "התחבר עם חשבון האוניברסיטה או האגודה",
+  /** Refusals on the student login page. */
   refused: {
     not_in_list: "לא מצאנו אותך ברשימת האוניברסיטה. פנה למשרד האגודה.",
+    no_domain: "התחבר עם חשבון האוניברסיטה, לא עם חשבון Gmail פרטי.",
+    wrong_domain: "החשבון הזה אינו חשבון של האוניברסיטה. התחבר עם חשבון mail.huji.ac.il.",
+    unverified_email: "Google לא אישר את כתובת הדוא\"ל של החשבון.",
+    expired: "פג תוקף ההתחברות. נסה שוב.",
+    cancelled: "ביטלת את ההתחברות.",
+    google_error: "Google לא השלים את ההתחברות. נסה שוב.",
+  },
+  /** Refusals on the staff login page. */
+  staffRefused: {
+    not_staff: "החשבון הזה אינו ברשימת הצוות. פנה למנהל באגודה.",
     no_domain: "התחבר עם חשבון האוניברסיטה או עם חשבון האגודה, לא עם חשבון Gmail פרטי.",
     wrong_domain: "החשבון הזה אינו חשבון של האוניברסיטה או של האגודה.",
     unverified_email: "Google לא אישר את כתובת הדוא\"ל של החשבון.",
@@ -117,12 +133,48 @@ export const T = {
     stock: "מלאי",
     stockCols: ["מתנה", "מלאי התחלתי", "סטודנטים בחרו", "סטודנטים קיבלו", "פנויות לבחירה", "במלאי בפועל"],
     drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. דווח למפתח.",
+    manage: "נהל עובדים ומלאי",
+  },
+
+  manager: {
+    title: "ניהול",
+    back: "חזור לעמדת החלוקה",
+    managers: "מנהלים",
+    managersHint: "רשימת המנהלים נמצאת בהגדרות השרת. פנה למפתח כדי לשנות אותה.",
+    workers: "עובדים",
+    noWorkers: "עדיין לא הוספת עובדים.",
+    newWorker: "כתובת דוא\"ל של עובד חדש, בחשבון של האוניברסיטה או של האגודה",
+    add: "הוסף",
+    remove: "הסר",
+    stock: "מלאי",
+    stockHint: "המלאי ההתחלתי הוא כמות היחידות שהאגודה קנתה מכל מתנה.",
+    stockCols: ["מתנה", "סטודנטים בחרו", "סטודנטים קיבלו", "מלאי התחלתי"],
+    save: "שמור",
+    done: {
+      added: "הוספנו את העובד.",
+      removed: "הסרנו את העובד.",
+      stock: "שמרנו את המלאי.",
+    },
+    errors: {
+      invalid: "הכתובת אינה כתובת דוא\"ל תקינה.",
+      wrong_domain: "הכתובת אינה כתובת של האוניברסיטה או של האגודה.",
+      manager: "הכתובת הזו שייכת למנהל.",
+      exists: "העובד כבר ברשימה.",
+      not_found: "העובד אינו ברשימה.",
+      invalid_stock: "הזן מספר שלם, 0 או יותר.",
+      unknown_gift: "לא מצאנו את המתנה.",
+      below_requested: "סטודנטים כבר בחרו במתנה הזו יותר פעמים מהמספר שהזנת. הזן לפחות",
+    },
   },
 } as const;
 
 export type StudentError = keyof typeof T.student.errors;
 
-export type RefusalReason = keyof typeof T.refused;
+export type StudentRefusal = keyof typeof T.refused;
+export type StaffRefusal = keyof typeof T.staffRefused;
+export type RefusalReason = StudentRefusal | StaffRefusal;
+export type ManagerDone = keyof typeof T.manager.done;
+export type ManagerError = keyof typeof T.manager.errors;
 
 /** DEMO=1 only. Inline style, so it shows even if the page's own styles change. */
 export const demoBanner = `<div role="alert" style="background:#9c1f1f;color:#fff;font-weight:700;text-align:center;padding:0.7rem;margin:-2rem -1rem 1.5rem">${"גרסת הדגמה. כל הנתונים בדויים, וכל אחד יכול להתחבר בתור כל משתמש. אל תזין מידע אמיתי."}</div>`;
@@ -138,7 +190,7 @@ export function esc(value: unknown): string {
 }
 
 /** Plan §7: isolate numbers and addresses inside Hebrew text, or they render reversed. */
-const ltr = (value: unknown) => `<bdi dir="ltr">${esc(value)}</bdi>`;
+export const ltr = (value: unknown) => `<bdi dir="ltr">${esc(value)}</bdi>`;
 
 function layout(body: string, wide = false): string {
   return `<!doctype html>
@@ -184,6 +236,9 @@ function layout(body: string, wide = false): string {
                       margin-block-start: 0.5rem; }
   .bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
   .bar form .button { width: auto; padding: 0.4rem 0.9rem; }
+  .button.small { width: auto; padding: 0.4rem 0.9rem; margin: 0; }
+  form.inline { display: flex; gap: 0.5rem; align-items: center; }
+  form.inline input { width: 6rem; margin: 0; }
   .card { border: 1px solid #d6d8de; border-radius: 10px; padding: 1rem;
           margin-block: 1rem; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; }
@@ -206,7 +261,8 @@ function layout(body: string, wide = false): string {
 </html>`;
 }
 
-export function loginPage(options: { devLogin: boolean; error?: RefusalReason }): string {
+/** Request 24: the student login page, the default at /. */
+export function loginPage(options: { devLogin: boolean; error?: StudentRefusal }): string {
   const error = options.error ? `<p class="error">${T.refused[options.error]}</p>` : "";
   const dev = options.devLogin
     ? `<fieldset>
@@ -215,15 +271,31 @@ export function loginPage(options: { devLogin: boolean; error?: RefusalReason })
     <label>${T.devStudent}<input name="national_id" dir="ltr" inputmode="numeric" placeholder="100000002"></label>
     <button class="button" name="kind" value="student">${T.devGo}</button>
   </form>
+</fieldset>`
+    : "";
+  return layout(`<h1>${T.title}</h1>
+${error}
+<a class="button" href="/auth/google">${T.signIn}</a>
+<p><a href="/staff/login">${T.staffLink}</a></p>
+${dev}`);
+}
+
+/** Request 24: the staff login page, for managers and workers. */
+export function staffLoginPage(options: { devLogin: boolean; error?: StaffRefusal }): string {
+  const error = options.error ? `<p class="error">${T.staffRefused[options.error]}</p>` : "";
+  const dev = options.devLogin
+    ? `<fieldset>
+  <legend>${T.devTitle}</legend>
   <form method="post" action="/auth/dev">
     <label>${T.devStaff}<input name="email" dir="ltr" placeholder="dev@aguda.org.il"></label>
     <button class="button" name="kind" value="staff">${T.devGo}</button>
   </form>
 </fieldset>`
     : "";
-  return layout(`<h1>${T.title}</h1>
+  return layout(`<h1>${T.staffLoginTitle}</h1>
 ${error}
-<a class="button" href="/auth/google">${T.signIn}</a>
+<a class="button" href="/auth/google/staff">${T.staffSignIn}</a>
+<p><a href="/">${T.studentLink}</a></p>
 ${dev}`);
 }
 
@@ -457,12 +529,13 @@ ${history}
 
 export function staffPage(options: {
   email: string;
+  role: "manager" | "worker";
   stats: StaffStats;
   student?: StudentView | null;
   searched?: boolean;
   message?: Notice;
 }): string {
-  const { email, stats, student, searched, message } = options;
+  const { email, role, stats, student, searched, message } = options;
   const giftNames = new Map(stats.gifts.map((g) => [g.id, g.name]));
 
   const result = student
@@ -484,6 +557,7 @@ export function staffPage(options: {
 
   return layout(
     `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
+${role === "manager" ? `<p><a href="/manager">${T.staff.manage}</a></p>` : ""}
 ${drift}
 <form method="post" action="/staff/lookup">
   <label>${T.staff.search}<input name="national_id" dir="ltr" inputmode="numeric" autofocus autocomplete="off"></label>
@@ -493,6 +567,63 @@ ${notice(message)}
 ${result}
 <section><h2>${T.staff.stock}</h2>
 <table><thead><tr>${T.staff.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+</section>`,
+    true,
+  );
+}
+
+// ---- manager (request 24) ----------------------------------------------------------------
+
+export function managerPage(options: {
+  email: string;
+  managers: string[];
+  workers: string[];
+  gifts: GiftView[];
+  message?: Notice;
+}): string {
+  const { email, managers, workers, gifts, message } = options;
+  const M = T.manager;
+
+  const workerRows = workers.length
+    ? `<table><tbody>${workers
+        .map(
+          (w) => `<tr><td>${ltr(w)}</td><td><form method="post" action="/manager/workers/remove">
+  <input type="hidden" name="email" value="${esc(w)}">
+  <button class="button secondary small">${M.remove}</button>
+</form></td></tr>`,
+        )
+        .join("")}</tbody></table>`
+    : `<p class="hint">${M.noWorkers}</p>`;
+
+  const stockRows = gifts
+    .map(
+      (g) => `<tr><td>${esc(g.name)}</td><td>${ltr(g.requested_count)}</td><td>${ltr(g.given_count)}</td><td>
+<form method="post" action="/manager/stock" class="inline">
+  <input type="hidden" name="gift_id" value="${g.id}">
+  <input name="starting_inventory" value="${g.starting_inventory}" dir="ltr" inputmode="numeric" aria-label="${M.stockCols[3]} ${esc(g.name)}">
+  <button class="button small">${M.save}</button>
+</form></td></tr>`,
+    )
+    .join("");
+
+  return layout(
+    `<div class="bar"><h1>${M.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
+<p><a href="/staff">${M.back}</a></p>
+${notice(message)}
+<section><h2>${M.workers}</h2>
+${workerRows}
+<form method="post" action="/manager/workers/add">
+  <label>${M.newWorker}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
+  <button class="button">${M.add}</button>
+</form>
+</section>
+<section><h2>${M.stock}</h2>
+<p class="hint">${M.stockHint}</p>
+<table><thead><tr>${M.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
+</section>
+<section><h2>${M.managers}</h2>
+<ul>${managers.map((m) => `<li>${ltr(m)}</li>`).join("")}</ul>
+<p class="hint">${M.managersHint}</p>
 </section>`,
     true,
   );

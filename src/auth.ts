@@ -1,6 +1,7 @@
 /**
- * Plan §2. One login page. The `hd` claim inside Google's signed ID token decides the
- * session kind. The browser never chooses it.
+ * Plan §2. Two login pages: students at /, staff at /staff/login (request 24). The page
+ * that started the login decides which list the person must be on. The signed ID token
+ * decides who the person is: its `hd` claim must be one of that page's domains.
  */
 import { OAuth2Client } from "google-auth-library";
 import { pool } from "./db.ts";
@@ -10,13 +11,15 @@ export type Claims = { email?: string; email_verified?: boolean; hd?: string };
 
 export type Domains = { student: string[]; staff: string[] };
 
+/** Which login page started the login. */
+export type Door = "student" | "staff";
+
 export type Decision =
-  | { kind: "student"; email: string }
-  | { kind: "staff"; email: string }
+  | { kind: "ok"; email: string }
   | { kind: "refused"; reason: "unverified_email" | "no_domain" | "wrong_domain" };
 
-/** Pure. Request 10: `mail.huji.ac.il` → student, `aguda.org.il` → staff, anything else → refused. */
-export function decide(claims: Claims, domains: Domains): Decision {
+/** Pure. The account must be a verified Google Workspace account in one of `allowed`. */
+export function decide(claims: Claims, allowed: string[]): Decision {
   if (claims.email_verified !== true || !claims.email) {
     return { kind: "refused", reason: "unverified_email" };
   }
@@ -24,11 +27,8 @@ export function decide(claims: Claims, domains: Domains): Decision {
   if (typeof claims.hd !== "string" || claims.hd === "") {
     return { kind: "refused", reason: "no_domain" };
   }
-  const hd = claims.hd.toLowerCase();
-  const email = claims.email.toLowerCase();
-  if (domains.student.includes(hd)) return { kind: "student", email };
-  if (domains.staff.includes(hd)) return { kind: "staff", email };
-  return { kind: "refused", reason: "wrong_domain" };
+  if (!allowed.includes(claims.hd.toLowerCase())) return { kind: "refused", reason: "wrong_domain" };
+  return { kind: "ok", email: claims.email.toLowerCase() };
 }
 
 /** A student session needs a row. Both sides are lowercase (plan §2). */

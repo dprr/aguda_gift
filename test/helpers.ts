@@ -10,7 +10,7 @@ if (!process.env.DATABASE_URL?.endsWith("/aguda_test")) {
 
 /** Drop everything and start from the migrations, with small stock so tests reach zero. */
 export async function freshDatabase(stock = 10): Promise<void> {
-  await pool.query("DROP TABLE IF EXISTS students, gifts CASCADE");
+  await pool.query("DROP TABLE IF EXISTS students, gifts, workers CASCADE");
   await migrate();
   await seedGifts(pool, [
     { id: 1, name: "קפוצ'ון", description: "", starting_inventory: stock },

@@ -31,16 +31,20 @@ async function login(body: Record<string, string>): Promise<{ session: string }>
   return { session };
 }
 const asStudent = (id: string) => login({ kind: "student", national_id: id });
+/** A worker. */
 const asStaff = () => login({ kind: "staff", email: "dana@aguda.org.il" });
+const asManager = () => login({ kind: "staff", email: "boss@aguda.org.il" });
 
 let ids: string[];
 beforeEach(async () => {
   await freshDatabase(5);
   ids = await loadStudents(10, 8); // students 0-7 are members, 8-9 are not
+  await pool.query("INSERT INTO workers (email) VALUES ('dana@aguda.org.il')");
   app = await buildApp({
     google: noGoogle,
     sessionSecret: "test-secret-test-secret-test-secret",
-    domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
+    domains: { student: ["mail.huji.ac.il"], staff: ["mail.huji.ac.il", "aguda.org.il"] },
+    managers: ["boss@aguda.org.il"],
     devLogin: true,
     production: false,
     origin: ORIGIN,
@@ -217,6 +221,93 @@ describe("staff page", () => {
     for (const m of res.body.matchAll(/(?:href|action)="([^"]*)"/g)) {
       assert.ok(!m[1].includes(ids[0]), `national ID in ${m[1]}`);
     }
+  });
+});
+
+// ---- manager (request 24) ---------------------------------------------------------------
+
+describe("manager page", () => {
+  const workers = async () => (await pool.query("SELECT email FROM workers ORDER BY email")).rows.map((r) => r.email);
+  const notice = async (location: string, cookies: { session: string }) =>
+    (await app.inject({ url: location, cookies })).body.match(/<p class="(?:ok|error)">([^<]*(?:<bdi[^>]*>[^<]*<\/bdi>[^<]*)?)<\/p>/)?.[1];
+
+  test("a manager adds a worker, and the worker can then log in", async () => {
+    const cookies = await asManager();
+    const res = await app.inject({ method: "POST", url: "/manager/workers/add", cookies, ...form({ email: " New@Mail.HUJI.ac.il " }) });
+    assert.equal(res.headers.location, "/manager?done=added");
+    assert.equal(await notice(res.headers.location as string, cookies), "הוספנו את העובד.");
+    assert.deepEqual(await workers(), ["dana@aguda.org.il", "new@mail.huji.ac.il"]);
+    await login({ kind: "staff", email: "new@mail.huji.ac.il" });
+  });
+
+  test("a worker address must be a valid university or Aguda address, new, and not a manager", async () => {
+    const cookies = await asManager();
+    for (const [email, error] of [
+      ["not-an-email", "invalid"],
+      ["x@gmail.com", "wrong_domain"],
+      ["dana@aguda.org.il", "exists"],
+      ["BOSS@aguda.org.il", "manager"],
+    ]) {
+      const res = await app.inject({ method: "POST", url: "/manager/workers/add", cookies, ...form({ email }) });
+      assert.equal(res.headers.location, `/manager?error=${error}`, email);
+    }
+    assert.deepEqual(await workers(), ["dana@aguda.org.il"]);
+  });
+
+  test("a manager removes a worker, and the worker is locked out at once", async () => {
+    const worker = await asStaff();
+    const res = await app.inject({ method: "POST", url: "/manager/workers/remove", cookies: await asManager(), ...form({ email: "dana@aguda.org.il" }) });
+    assert.equal(res.headers.location, "/manager?done=removed");
+    assert.deepEqual(await workers(), []);
+    assert.equal((await app.inject({ url: "/staff", cookies: worker })).headers.location, "/staff/login?error=not_staff");
+  });
+
+  test("the manager page lists workers, managers, and each gift's stock", async () => {
+    const res = await app.inject({ url: "/manager", cookies: await asManager() });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.body, /dana@aguda\.org\.il/);
+    assert.match(res.body, /boss@aguda\.org\.il/);
+    assert.equal(res.body.split('action="/manager/stock"').length - 1, 4);
+    assert.equal(res.headers["cache-control"], "no-store");
+  });
+
+  test("a worker cannot use any manager route, and nothing changes", async () => {
+    const cookies = await asStaff();
+    for (const [url, body] of [
+      ["/manager/workers/add", { email: "x@aguda.org.il" }],
+      ["/manager/workers/remove", { email: "dana@aguda.org.il" }],
+      ["/manager/stock", { gift_id: "1", starting_inventory: "99" }],
+    ] as const) {
+      assert.equal((await app.inject({ method: "POST", url, cookies, ...form(body) })).statusCode, 403, url);
+    }
+    assert.equal((await app.inject({ url: "/manager", cookies })).statusCode, 403);
+    assert.deepEqual(await workers(), ["dana@aguda.org.il"]);
+    assert.equal((await gift(1)).starting_inventory, 5);
+  });
+
+  test("a manager sets the stock, but never below what students already selected", async () => {
+    const cookies = await asManager();
+    await selectGift(ids[0], 1);
+    await selectGift(ids[1], 1);
+    const set = (value: string) =>
+      app.inject({ method: "POST", url: "/manager/stock", cookies, ...form({ gift_id: "1", starting_inventory: value }) });
+
+    assert.equal((await set("20")).headers.location, "/manager?done=stock");
+    assert.equal((await gift(1)).starting_inventory, 20);
+
+    const low = await set("1");
+    assert.equal(low.headers.location, "/manager?error=below_requested&min=2");
+    assert.match((await notice(low.headers.location as string, cookies))!, /הזן לפחות <bdi dir="ltr">2<\/bdi>/);
+    assert.equal((await gift(1)).starting_inventory, 20);
+
+    for (const bad of ["-1", "abc", "", "1.5"]) {
+      assert.equal((await set(bad)).headers.location, "/manager?error=invalid_stock", bad);
+    }
+
+    // Down to exactly the selections: the gift is now sold out for everyone else.
+    assert.equal((await set("2")).headers.location, "/manager?done=stock");
+    const page = await app.inject({ url: "/student", cookies: await asStudent(ids[2]) });
+    assert.doesNotMatch(page.body, /confirm\?gift=1"/);
   });
 });
 

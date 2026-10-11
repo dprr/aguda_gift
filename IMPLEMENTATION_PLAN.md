@@ -33,11 +33,12 @@ the later section is wrong.
 | Language | TypeScript, backend and frontend | One language for the whole system. The frontend is TypeScript either way |
 | Backend | Fastify | `app.inject()` tests concurrency in-process |
 | Frontend | **Server-rendered HTML. No React, no Vite, no build step** | The screens are a list of four gifts and one search box. React would add a build, a second `package.json`, a JSON API, and a second copy of the page logic (§0) |
-| Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are two tables. An ORM would earn nothing (§0) |
+| Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are three small tables. An ORM would earn nothing (§0) |
 | Database | PostgreSQL on RDS | Same price as a container once the instance is sized honestly, and it adds point-in-time recovery |
-| **Tables** | **2: `students` and `gifts`** | §0. Everything else serves no line in §14 |
-| Login | One page, one Google button | The `hd` claim selects the interface. See §2 |
-| Passwords | **None** | Google authenticates. No staff table, no reset path |
+| **Tables** | **3: `students`, `gifts`, and `workers`** | §0. `workers` serves request 24. Everything else serves no line in §14 |
+| Login | Two pages: students at `/`, staff at `/staff/login`. Google on both | Request 24. See §2 |
+| Passwords | **None** | Google authenticates. No reset path |
+| Staff roles | Managers in `MANAGERS` (.env). Workers in the `workers` table | Request 24. Managers add and remove workers on `/manager`. No request asks for a screen that manages managers |
 | Identity key | National ID is the primary key | HUJI uses it as the student number. One identifier |
 | Student arrays | `membership_history` and `interactions`, both jsonb on the student row | Requests 13 and 18. No history table, and no interactions table |
 | Stock counters | `starting_inventory`, `requested_count`, `given_count` on `gifts` | Requests 16 and 19. §5.1 refuses a selection when a gift is sold out. The handout needs no stock check |
@@ -48,16 +49,14 @@ the later section is wrong.
 
 ## 2. Login
 
-Both interfaces share **one page with one Google button**. The page asks nothing about
-who the person is. The backend reads the `hd` claim from the signed ID token and selects
-the interface.
+Request 24. **Two login pages, each with one Google button.** Students use `/`, which is
+the default. Staff use `/staff/login`. Each page links to the other.
 
-| `hd` claim in the ID token | Result |
-|---|---|
-| `mail.huji.ac.il`, or another confirmed student domain | Student session |
-| `aguda.org.il` | Staff session |
-| Any other domain | Refuse |
-| **No `hd` claim** | Refuse |
+| Login page | `hd` claim must be | Then the email must be | Result |
+|---|---|---|---|
+| `/` | `mail.huji.ac.il` (`STUDENT_DOMAINS`) | `students.university_email` | Student session |
+| `/staff/login` | `mail.huji.ac.il` or `aguda.org.il` (`STAFF_DOMAINS`) | in `MANAGERS`, or a row in `workers` | Staff session |
+| Either | **No `hd` claim**, or another domain | — | Refuse |
 
 Use only the `openid`, `email`, and `profile` scopes. Google needs no application review
 for these.
@@ -69,27 +68,29 @@ claim inside the signed ID token, and verify `email_verified`.
 ⚠️ **A personal Gmail account sends no `hd` claim.** Treat a missing claim as a refusal,
 not as an empty string.
 
-⚠️ **Never let the browser ask for a session kind.** Accept no `role`, `kind`, or `as`
-parameter. Put no session kind in the OAuth `state`. The token decides.
+**The page selects a list. It grants nothing.** `/auth/google` and `/auth/google/staff`
+write the page into the signed OAuth cookie, never into the `state` or the Google URL.
+The callback then checks the person against that page's list. A browser that starts at
+the staff page still gets in only if its email is on the staff list.
 
-Send `prompt=select_account` on every login. A student who works for Aguda holds two
-accounts and must choose between them.
+**A student who works for Aguda** uses one HUJI account for both. The page decides which
+session that person gets. Send `prompt=select_account` on every login, because some
+people hold two accounts.
 
 **A student session finds the student by university email.** Google returns the address,
 and `students.university_email` matches it. The student never types a national ID.
 
 ⚠️ **Lowercase both sides.** The sync stores `university_email` in lowercase, and login
 lowercases the Google address before the lookup. A university record with `Dana@Mail...`
-must not lock a student out.
+must not lock a student out. `workers.email` and `MANAGERS` are lowercase too.
 
-**A staff session needs no table.** Any `aguda.org.il` address is staff. This is a
-consequence of §14 holding no request for staff accounts or roles. See §13.
+### The failures each page explains in clear Hebrew
 
-### Two failures the page must explain in clear Hebrew
-
-1. A HUJI address with no matching student. Say "We cannot find you in the university
-   list. Ask at the Aguda office." The cause is a new student, or a student who left.
-2. An `aguda.org.il` address. There is no failure case, which is the point in §13.
+1. Student page: a HUJI address with no matching student. "We cannot find you in the
+   university list. Ask at the Aguda office." The cause is a new student, or a student
+   who left.
+2. Staff page: an address on neither staff list. "This account is not on the staff list.
+   Ask an Aguda manager."
 
 ---
 
@@ -111,20 +112,22 @@ aguda/
     source.ts   # StudentSource and FakeSource
     queries.ts  # reads for the two pages
     auth.ts     # §2: the hd decision and Google
+    staff.ts    # request 24: roles, workers, stock
+    survey.ts   # request 22
     pages.ts    # every page, and every Hebrew string in one object
     server.ts   # Fastify routes, sessions, CSRF
   test/
   docker-compose.yml   # local PostgreSQL only
 ```
 
-`src/gifts.ts` and `src/sync.ts` hold every write. No route handler writes to the database
+`src/gifts.ts`, `src/sync.ts`, `src/survey.ts`, and `src/staff.ts` hold every write. No route handler writes to the database
 directly.
 
 ---
 
 ## 4. Data model
 
-Two tables. Every timestamp is `timestamptz` in UTC. Display converts to Asia/Jerusalem.
+Three tables. Every timestamp is `timestamptz` in UTC. Display converts to Asia/Jerusalem.
 
 ### 4.1 `students`
 
@@ -252,11 +255,22 @@ cannot disagree.
 | `id` | integer, primary key, 1 to 4 | |
 | `name` | text, Hebrew | |
 | `description` | text, Hebrew | |
-| `starting_inventory` | integer, not null | Request 16. Set once at seed time. **Never changed** |
+| `starting_inventory` | integer, not null | Request 16. Set at seed time. A manager changes it on `/manager` (request 24) |
 | `requested_count` | integer, not null, default 0 | Request 16. Rises on each student selection |
 | `given_count` | integer, not null, default 0 | Request 16. Rises on each handover |
 
-Four rows. The seed inserts a gift **only if its `id` is absent**, so a restart never resets a counter. To change a gift after the first seed, edit the row by hand.
+Four rows. The seed inserts a gift if its `id` is absent, and otherwise updates only the
+name, the description, and the photo. A restart never resets a counter or the stock.
+
+**A manager sets the stock** (request 24) with one guarded write:
+
+```sql
+UPDATE gifts SET starting_inventory = $2 WHERE id = $1 AND requested_count <= $2
+```
+
+The stock never falls below what students already selected, even when a selection lands
+at the same moment. A manager may set it exactly to `requested_count`, which makes the
+gift sold out for everyone else.
 
 **Two derived numbers, neither stored.**
 
@@ -301,6 +315,15 @@ HAVING g.given_count <> count(s.national_id);
 
 Run both in the test suite after every concurrency test, and expose them on a staff
 screen. A counter that drifts is then visible instead of silent.
+
+### 4.3 `workers`
+
+| Column | Type | Notes |
+|---|---|---|
+| `email` | text, primary key, lowercase | Request 24. A worker that a manager added |
+
+One column. Managers are not here: they come from `MANAGERS` in `.env`, so the first
+manager needs no setup screen. Which manager added a worker is not recorded (§13).
 
 ---
 
@@ -468,15 +491,17 @@ the server refuses any POST whose `Origin` header names another origin. The seco
 covers a sibling subdomain, which `SameSite` treats as the same site. Pages that show a
 student send `Cache-Control: no-store`, for shared desk computers.
 
-- The session holds `kind` of `student` or `staff`, and the email.
-- The server writes `kind` from the `hd` claim. No request can change it.
+- The session holds `kind` of `student` or `staff`, and the national ID or the email.
+- The server writes `kind` after the §2 checks. No request can change it.
 - Every student route refuses a `staff` session. Every staff route refuses a `student`
   session. Return 403.
 - A student session may read and write **only its own** row.
+- **The session holds no role.** Every staff request reads the role again, from
+  `MANAGERS` and `workers`. A removed worker is locked out on the next click, not when
+  the 12-hour cookie expires. A worker on a `/manager` route gets 403.
 
-⚠️ Any `aguda.org.il` address is staff, with full staff powers. §14 holds no request for
-roles or campus permissions. This is recorded in §13, and it is the largest difference
-from the specification.
+Every manager and worker has full desk powers, on every campus. §14 holds no request for
+campus permissions (§13).
 
 ---
 
@@ -589,7 +614,7 @@ Verify in the AWS calculator before committing.
 |---|---|
 | HUJI blocks third-party Google login | Ask in week 1. The fallback is a one-time code by email, which needs AWS SES and a production-access request |
 | The VBA script needs an interactive login | Keep `StudentSource` narrow. Everything else runs on `FakeSource`. M6 is independent |
-| Any `aguda.org.il` address is staff | Accepted. §14 holds no request for roles. Recorded in §13 |
+| A worker who leaves keeps access | A manager removes the worker on `/manager`. The next request is refused, because §6 reads the role on every request |
 | A counter drifts from the student rows | Two reconciliation queries in §4.2, run in the test suite and shown on a staff screen |
 | Two students claim the last unit of a gift | §5.1 statement 2 is a compare-and-swap on the one `gifts` row. Exactly one succeeds. Threaded tests in M2 prove it |
 | A national ID reaches an access log | Never put it in a URL path or query string. Staff lookup is a `POST` with the ID in the body. Redact the field in the Fastify logger |
@@ -616,7 +641,9 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | Which employee handed a gift over | Not recorded. `gift_taken_at` holds only the time | A `given_by_email` column, written by the §5.2 statement |
 | §5.2 Stock per collection location | One counter per gift, across all centers | A `gift_inventory` table keyed by gift and location |
 | §7.2 Questionnaire, editable on a screen | Built as request 22, but the questions live in `src/survey.ts`, so a change needs a developer and a deploy | A questions table and an editing screen. The stored answers carry a `version`, so old answers stay readable |
-| §6.1, §6.2 Staff accounts and roles | Any `aguda.org.il` address is staff | A `staff_users` table with role and campus columns, and a campus check on every location-scoped route |
+| §6.1, §6.2 Campus permissions | A manager or a worker acts on every campus | A campus column on `workers`, and a campus check on every location-scoped route |
+| Who added or removed a worker | Not recorded | An `added_by` column, or an audit log |
+| A screen that manages managers | Managers change only through `MANAGERS` in `.env` and a restart | A role column on `workers` |
 | §5.1 Collection locations | Not recorded. The handout stores only the time | `campuses` and `collection_locations` tables |
 | §3.2 Sync scheduling UI | The worker runs on a fixed interval | An administrator screen, and a schedule record |
 | §3.4 Sync run records | The worker logs. No table | A `sync_runs` table with counts and errors |
@@ -659,13 +686,13 @@ document is a wish list, and a section in it is not a request.
 | 7 | A gift selection never expires |
 | 8 | Several employees work at the same time, from separate distribution centers |
 | 9 | One identifier only: the national ID. HUJI uses it as the student number |
-| 10 | One login page. Google login. `mail.huji.ac.il` shows the student page, `aguda.org.il` shows the staff page |
+| 10 | Google login. ~~One login page, chosen by domain~~: replaced by request 24 |
 | 11 | A periodic run copies the university student list into a local database |
 | 12 | Everything else reads the local database only |
 | 13 | A list of every time a student's membership changed, inside the student row |
 | 14 | Hebrew only, right to left |
 | 15 | The backend runs on AWS |
-| 16 | `gifts` tracks a starting inventory set once, a count of requests, and a count of gifts given |
+| 16 | `gifts` tracks a starting inventory, a count of requests, and a count of gifts given. A manager edits the starting inventory (request 24) |
 | 17 | `students` holds the §4.2 university fields that are used: first and last name, gender, HUJI email, phone, and all academic fields |
 | 18 | `students` holds a list of interactions: gift collection now, merchandise and Kossel membership later |
 | 19 | A student cannot select a sold-out gift. The check belongs at selection, not at distribution |
@@ -673,6 +700,7 @@ document is a wish list, and a section in it is not a request.
 | 21 | Hebrew text uses no gendered new-speak. Text about one known student follows `students.gender`; masculine only when the gender is unknown |
 | 22 | Every student, member or not, submits a survey before selecting a gift. Submitted is final: no editing, and no re-asking when questions are added later |
 | 23 | The 4 gifts are the backpack, the thermal cup, the laptop stand, and the lunch bag, each shown with its photo from `img/` |
+| 24 | Two login pages: students (the default) and staff. Staff are managers or workers, with a `mail.huji.ac.il` or an `aguda.org.il` account. Managers add and remove workers, and edit the gift stock. All students have `mail.huji.ac.il` accounts |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

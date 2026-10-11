@@ -4,12 +4,13 @@ import { join } from "node:path";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
-import { decide, type Domains, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
+import { decide, type Domains, type Door, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
 import { markTaken, selectGift } from "./gifts.ts";
-import { confirmPage, demoBanner, esc, lapsedText, loginPage, noSelectionText, studentErrorText, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, surveyPage, T, when } from "./pages.ts";
+import { confirmPage, demoBanner, esc, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
+import { addWorker, listWorkers, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 
@@ -28,6 +29,8 @@ export type AppOptions = {
   demo?: boolean;
   /** Request 22. Defaults to the live SURVEY; tests pass their own. */
   survey?: Survey;
+  /** Request 24. Manager emails, from MANAGERS. Workers live in the `workers` table. */
+  managers?: string[];
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
   origin: string;
 };
@@ -102,8 +105,10 @@ export async function buildApp(options: AppOptions) {
     }
   }
 
-  const refuse = (reply: FastifyReply, reason: RefusalReason) =>
-    reply.redirect(`/?error=${reason}`);
+  const managers = (options.managers ?? []).map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const loginUrl = (door: Door) => (door === "staff" ? "/staff/login" : "/");
+  const refuse = (reply: FastifyReply, reason: RefusalReason, door: Door = "student") =>
+    reply.redirect(`${loginUrl(door)}?error=${reason}`);
 
   // ---- gift photos --------------------------------------------------------------------
 
@@ -119,27 +124,39 @@ export async function buildApp(options: AppOptions) {
     return reply.type("image/jpeg").header("cache-control", "public, max-age=86400").send(image);
   });
 
-  // ---- the one login page -------------------------------------------------------------
+  // ---- the two login pages (request 24) ----------------------------------------------
 
   app.get<{ Querystring: { error?: string } }>("/", async (request, reply) => {
     const session = readSession(request);
     if (session) return reply.redirect(session.kind === "student" ? "/student" : "/staff");
     const error = request.query.error;
-    const known = error && error in T.refused ? (error as RefusalReason) : undefined;
+    const known = error && error in T.refused ? (error as StudentRefusal) : undefined;
     return reply.type("text/html").send(loginPage({ devLogin: options.devLogin, error: known }));
+  });
+
+  app.get<{ Querystring: { error?: string } }>("/staff/login", async (request, reply) => {
+    // A student session may stay here: a student who also works for Aguda logs in again.
+    if (readSession(request)?.kind === "staff") return reply.redirect("/staff");
+    const error = request.query.error;
+    const known = error && error in T.staffRefused ? (error as StaffRefusal) : undefined;
+    return reply.type("text/html").send(staffLoginPage({ devLogin: options.devLogin, error: known }));
   });
 
   // ---- Google -------------------------------------------------------------------------
 
-  app.get("/auth/google", async (_request, reply) => {
+  // The door goes into the signed OAuth cookie, never into the state or the URL Google
+  // sees. It only selects which list the person must be on; it grants nothing alone.
+  const startGoogle = (door: Door) => async (_request: FastifyRequest, reply: FastifyReply) => {
     const state = randomBytes(16).toString("base64url");
     const { url, codeVerifier } = await options.google.start(state);
-    reply.setCookie(OAUTH_COOKIE, JSON.stringify({ state, codeVerifier }), {
+    reply.setCookie(OAUTH_COOKIE, JSON.stringify({ state, codeVerifier, door }), {
       ...cookieBase,
       maxAge: 600,
     });
     return reply.redirect(url);
-  });
+  };
+  app.get("/auth/google", startGoogle("student"));
+  app.get("/auth/google/staff", startGoogle("staff"));
 
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     "/auth/callback",
@@ -147,21 +164,22 @@ export async function buildApp(options: AppOptions) {
       const raw = request.cookies[OAUTH_COOKIE];
       reply.clearCookie(OAUTH_COOKIE, { path: "/" });
 
-      if (request.query.error) {
-        return refuse(reply, request.query.error === "access_denied" ? "cancelled" : "google_error");
-      }
-
-      // The state must match the one this browser started with. This stops a login that
-      // another site started on the student's behalf.
       const unsigned = raw ? request.unsignCookie(raw) : { valid: false, value: null };
-      let saved: { state: string; codeVerifier: string } | null = null;
+      let saved: { state: string; codeVerifier: string; door?: Door } | null = null;
       try {
         saved = unsigned.valid && unsigned.value ? JSON.parse(unsigned.value) : null;
       } catch {
         saved = null;
       }
+      const door: Door = saved?.door === "staff" ? "staff" : "student";
+
+      if (request.query.error) {
+        return refuse(reply, request.query.error === "access_denied" ? "cancelled" : "google_error", door);
+      }
+      // The state must match the one this browser started with. This stops a login that
+      // another site started on the person's behalf.
       if (!saved || !request.query.state || saved.state !== request.query.state || !request.query.code) {
-        return refuse(reply, "expired");
+        return refuse(reply, "expired", door);
       }
 
       let claims;
@@ -169,13 +187,14 @@ export async function buildApp(options: AppOptions) {
         claims = await options.google.finish(request.query.code, saved.codeVerifier);
       } catch (error) {
         request.log.warn({ err: error }, "Google token exchange failed");
-        return refuse(reply, "google_error");
+        return refuse(reply, "google_error", door);
       }
 
-      const decision = decide(claims, options.domains);
-      if (decision.kind === "refused") return refuse(reply, decision.reason);
+      const decision = decide(claims, door === "staff" ? options.domains.staff : options.domains.student);
+      if (decision.kind === "refused") return refuse(reply, decision.reason, door);
 
-      if (decision.kind === "staff") {
+      if (door === "staff") {
+        if (!(await roleOf(decision.email, managers))) return refuse(reply, "not_staff", "staff");
         setSession(reply, { kind: "staff", email: decision.email });
         return reply.redirect("/staff");
       }
@@ -202,33 +221,55 @@ export async function buildApp(options: AppOptions) {
           setSession(reply, { kind: "student", nationalId: national_id.trim() });
           return reply.redirect("/student");
         }
-        const domain = email?.trim().toLowerCase().split("@")[1];
-        if (kind === "staff" && domain && options.domains.staff.includes(domain)) {
-          setSession(reply, { kind: "staff", email: email!.trim().toLowerCase() });
+        // Staff skip Google here, but never the staff list.
+        const address = email?.trim().toLowerCase() ?? "";
+        if (kind === "staff" && address && (await roleOf(address, managers))) {
+          setSession(reply, { kind: "staff", email: address });
           return reply.redirect("/staff");
         }
-        return refuse(reply, "wrong_domain");
+        return kind === "staff" ? refuse(reply, "not_staff", "staff") : refuse(reply, "not_in_list");
       },
     );
   }
 
-  app.post("/auth/logout", async (_request, reply) => {
+  app.post("/auth/logout", async (request, reply) => {
+    const session = readSession(request);
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
-    return reply.redirect("/");
+    return reply.redirect(loginUrl(session?.kind === "staff" ? "staff" : "student"));
   });
 
-  // ---- the two interfaces ------------------------------------------------------------
+  // ---- the interfaces ----------------------------------------------------------------
 
-  /** Plan §6: a student route refuses a staff session, and the reverse. 403, not 404. */
-  function requireKind(kind: Session["kind"]) {
+  type Authed = FastifyRequest & { session: Session; role?: Role };
+
+  /** Plan §6: a student route refuses a staff session. 403, not 404. */
+  async function requireStudent(request: FastifyRequest, reply: FastifyReply) {
+    const session = readSession(request);
+    if (!session) return reply.redirect("/");
+    if (session.kind !== "student") return reply.code(403).send("Forbidden");
+    (request as Authed).session = session;
+  }
+
+  /**
+   * A staff route checks the role on every request (request 24). An email that left the
+   * staff list loses its session at once. A worker on a manager route gets 403.
+   */
+  function requireStaff(needed?: "manager") {
     return async (request: FastifyRequest, reply: FastifyReply) => {
       const session = readSession(request);
-      if (!session) return reply.redirect("/");
-      if (session.kind !== kind) return reply.code(403).send("Forbidden");
-      (request as FastifyRequest & { session: Session }).session = session;
+      if (!session) return reply.redirect("/staff/login");
+      if (session.kind !== "staff") return reply.code(403).send("Forbidden");
+      const role = await roleOf(session.email, managers);
+      if (!role) {
+        reply.clearCookie(SESSION_COOKIE, { path: "/" });
+        return refuse(reply, "not_staff", "staff");
+      }
+      if (needed && role !== needed) return reply.code(403).send("Forbidden");
+      (request as Authed).session = session;
+      (request as Authed).role = role;
     };
   }
-  const sessionOf = (request: FastifyRequest) => (request as FastifyRequest & { session: Session }).session;
+  const sessionOf = (request: FastifyRequest) => (request as Authed).session;
   const studentId = (request: FastifyRequest) => {
     const s = sessionOf(request);
     return s.kind === "student" ? s.nationalId : "";
@@ -237,6 +278,7 @@ export async function buildApp(options: AppOptions) {
     const s = sessionOf(request);
     return s.kind === "staff" ? s.email : "";
   };
+  const staffRole = (request: FastifyRequest) => (request as Authed).role ?? "worker";
   const html = (reply: FastifyReply, body: string) => noStore(reply).type("text/html").send(body);
 
   // ---- student ------------------------------------------------------------------------
@@ -245,7 +287,7 @@ export async function buildApp(options: AppOptions) {
 
   app.get<{ Querystring: { saved?: string; error?: string; surveyed?: string } }>(
     "/student",
-    { preHandler: requireKind("student") },
+    { preHandler: requireStudent },
     async (request, reply) => {
       const s = await findStudent(studentId(request));
       if (!s) {
@@ -268,7 +310,7 @@ export async function buildApp(options: AppOptions) {
 
   app.get<{ Querystring: { gift?: string } }>(
     "/student/confirm",
-    { preHandler: requireKind("student") },
+    { preHandler: requireStudent },
     async (request, reply) => {
       const gift = (await listGifts()).find((g) => g.id === Number(request.query.gift));
       if (!gift) return reply.redirect("/student?error=unknown_gift");
@@ -280,7 +322,7 @@ export async function buildApp(options: AppOptions) {
 
   app.post<{ Body: { gift_id?: string } }>(
     "/student/select",
-    { preHandler: requireKind("student") },
+    { preHandler: requireStudent },
     async (request, reply) => {
       const result = await selectGift(studentId(request), Number(request.body?.gift_id));
       return reply.redirect(result.ok ? "/student?saved=1" : `/student?error=${result.reason}`);
@@ -289,7 +331,7 @@ export async function buildApp(options: AppOptions) {
 
   app.post<{ Body: Record<string, unknown> }>(
     "/student/survey",
-    { preHandler: requireKind("student") },
+    { preHandler: requireStudent },
     async (request, reply) => {
       const body = request.body ?? {};
       const checked = validate(survey, body);
@@ -308,23 +350,23 @@ export async function buildApp(options: AppOptions) {
   // The national ID always travels in a POST body, so it never enters a URL, a browser
   // history, or an access log (plan §12). So search answers with a page, not a redirect.
 
-  app.get("/staff", { preHandler: requireKind("staff") }, async (request, reply) => {
-    return html(reply, staffPage({ email: staffEmail(request), stats: await staffStats() }));
+  app.get("/staff", { preHandler: requireStaff() }, async (request, reply) => {
+    return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats() }));
   });
 
   app.post<{ Body: { national_id?: string } }>(
     "/staff/lookup",
-    { preHandler: requireKind("staff") },
+    { preHandler: requireStaff() },
     async (request, reply) => {
       const id = (request.body?.national_id ?? "").trim();
       const student = id ? await findStudent(id) : null;
-      return html(reply, staffPage({ email: staffEmail(request), stats: await staffStats(), student, searched: id !== "" }));
+      return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: id !== "" }));
     },
   );
 
   app.post<{ Body: { national_id?: string } }>(
     "/staff/take",
-    { preHandler: requireKind("staff") },
+    { preHandler: requireStaff() },
     async (request, reply) => {
       const id = (request.body?.national_id ?? "").trim();
       const result = await markTaken(id);
@@ -346,7 +388,64 @@ export async function buildApp(options: AppOptions) {
       } else {
         message = { kind: "error", text: T.staff.notFound };
       }
-      return html(reply, staffPage({ email: staffEmail(request), stats: await staffStats(), student, searched: true, message }));
+      return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: true, message }));
+    },
+  );
+
+  // ---- manager (request 24) ------------------------------------------------------------
+  // Managers add and remove workers, and set each gift's starting inventory. The result
+  // comes back as a short code in the redirect, so a reload never repeats the action.
+
+  app.get<{ Querystring: { done?: string; error?: string; min?: string } }>(
+    "/manager",
+    { preHandler: requireStaff("manager") },
+    async (request, reply) => {
+      const { done, error, min } = request.query;
+      let message: Notice | undefined;
+      if (done && done in T.manager.done) message = { kind: "ok", text: T.manager.done[done as ManagerDone] };
+      else if (error && error in T.manager.errors) {
+        const text = T.manager.errors[error as ManagerError];
+        message = { kind: "error", text: error === "below_requested" ? `${text} ${ltr(Number(min) || 0)}.` : text };
+      }
+      return html(reply, managerPage({
+        email: staffEmail(request),
+        managers,
+        workers: await listWorkers(),
+        gifts: await listGifts(),
+        message,
+      }));
+    },
+  );
+
+  app.post<{ Body: { email?: string } }>(
+    "/manager/workers/add",
+    { preHandler: requireStaff("manager") },
+    async (request, reply) => {
+      const result = await addWorker(request.body?.email ?? "", options.domains.staff, managers);
+      return reply.redirect(result.ok ? "/manager?done=added" : `/manager?error=${result.reason}`);
+    },
+  );
+
+  app.post<{ Body: { email?: string } }>(
+    "/manager/workers/remove",
+    { preHandler: requireStaff("manager") },
+    async (request, reply) => {
+      const removed = await removeWorker(request.body?.email ?? "");
+      return reply.redirect(removed ? "/manager?done=removed" : "/manager?error=not_found");
+    },
+  );
+
+  app.post<{ Body: { gift_id?: string; starting_inventory?: string } }>(
+    "/manager/stock",
+    { preHandler: requireStaff("manager") },
+    async (request, reply) => {
+      const result = await setStock(Number(request.body?.gift_id), request.body?.starting_inventory ?? "");
+      if (result.ok) return reply.redirect("/manager?done=stock");
+      return reply.redirect(
+        result.reason === "below_requested"
+          ? `/manager?error=below_requested&min=${result.min}`
+          : `/manager?error=${result.reason === "invalid" ? "invalid_stock" : result.reason}`,
+      );
     },
   );
 
@@ -372,12 +471,17 @@ if (import.meta.main) {
       redirectUri: `${baseUrl}/auth/callback`,
     }),
     sessionSecret: env("SESSION_SECRET"),
-    domains: { student: list("STUDENT_DOMAINS", "mail.huji.ac.il"), staff: list("STAFF_DOMAINS", "aguda.org.il") },
+    domains: { student: list("STUDENT_DOMAINS", "mail.huji.ac.il"), staff: list("STAFF_DOMAINS", "mail.huji.ac.il,aguda.org.il") },
+    managers: list("MANAGERS", "").filter(Boolean),
     devLogin: process.env.DEV_LOGIN === "1",
     demo: process.env.DEMO === "1",
     production: process.env.NODE_ENV === "production",
     origin: new URL(baseUrl).origin,
   });
+
+  if (!process.env.MANAGERS?.trim()) {
+    console.log("MANAGERS is empty: nobody can open the manager page or add workers");
+  }
 
   // Request 11: the periodic sync. Off unless SYNC_SOURCE is set.
   const syncSource = process.env.SYNC_SOURCE ?? "";
