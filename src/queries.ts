@@ -15,13 +15,15 @@ export type StudentView = {
   gift_name: string | null;
   gift_taken_at: Date | null;
   interactions: { at: string; type: string; gift_id?: number }[];
+  /** Request 22. The student may not select a gift until this is true. */
+  survey_submitted: boolean;
 };
 
 export async function findStudent(nationalId: string): Promise<StudentView | null> {
   const r = await pool.query(
     `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.faculty, s.campus, s.member,
             s.member_changed_at, s.gift_id, g.name AS gift_name, s.gift_taken_at,
-            s.interactions
+            s.interactions, s.survey IS NOT NULL AS survey_submitted
        FROM students s LEFT JOIN gifts g ON g.id = s.gift_id
       WHERE s.national_id = $1`,
     [nationalId],

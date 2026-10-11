@@ -159,6 +159,7 @@ One row per student. Current values in columns, two append-only arrays beside th
 | `gift_id` | integer, fk `gifts`, nullable | The current selection. Null means none |
 | `gift_taken_at` | timestamptz, nullable | **Not null means the gift was handed over** |
 | `created_at` | timestamptz | First seen. Written once |
+| `survey` | jsonb, nullable | Request 22. `{version, submitted_at, answers}`. Null until submitted, then never changed |
 | **Arrays** | | |
 | `membership_history` | jsonb, default `'[]'` | Append-only. Request 13. **Membership changes only** |
 | `interactions` | jsonb, default `'[]'` | Append-only. Request 18. Gift collection now, merchandise and Kossel later |
@@ -336,8 +337,9 @@ BEGIN;
      SET gift_id = $2
    WHERE national_id = $1
      AND member IS TRUE
-     AND gift_id IS NULL;
-  -- zero rows: ROLLBACK. Not a member, or a selection already exists
+     AND gift_id IS NULL
+     AND survey IS NOT NULL;   -- request 22
+  -- zero rows: ROLLBACK. Not a member, a selection already exists, or no survey yet
 
   -- 2. claim one unit of stock. Request 19
   UPDATE gifts
@@ -613,7 +615,7 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | A student who left the university is indistinguishable from one who stays | No enrollment column. A graduate with stale membership can still collect | A `present` boolean, set false for students absent from a validated complete response, plus a date if the specification's §10 absence history is wanted |
 | Which employee handed a gift over | Not recorded. `gift_taken_at` holds only the time | A `given_by_email` column, written by the §5.2 statement |
 | §5.2 Stock per collection location | One counter per gift, across all centers | A `gift_inventory` table keyed by gift and location |
-| §7.2 Questionnaire | Not built at all | A `questionnaire_versions` table, and a third array on `students` for the answers |
+| §7.2 Questionnaire, editable on a screen | Built as request 22, but the questions live in `src/survey.ts`, so a change needs a developer and a deploy | A questions table and an editing screen. The stored answers carry a `version`, so old answers stay readable |
 | §6.1, §6.2 Staff accounts and roles | Any `aguda.org.il` address is staff | A `staff_users` table with role and campus columns, and a campus check on every location-scoped route |
 | §5.1 Collection locations | Not recorded. The handout stores only the time | `campuses` and `collection_locations` tables |
 | §3.2 Sync scheduling UI | The worker runs on a fixed interval | An administrator screen, and a schedule record |
@@ -669,6 +671,7 @@ document is a wish list, and a section in it is not a request.
 | 19 | A student cannot select a sold-out gift. The check belongs at selection, not at distribution |
 | 20 | A student must be a member at selection **and** at collection. A lapsed member is refused at the desk, and the unit stays held |
 | 21 | Hebrew text uses no gendered new-speak. Text about one known student follows `students.gender`; masculine only when the gender is unknown |
+| 22 | Every student, member or not, submits a survey before selecting a gift. Submitted is final: no editing, and no re-asking when questions are added later |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

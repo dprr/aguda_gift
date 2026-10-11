@@ -5,6 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
+import type { Answers, Question, Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -54,7 +55,18 @@ export const T = {
       not_member: "רק חברי אגודה יכולים לבחור מתנה.",
       unknown_gift: "המתנה לא נמצאה.",
       unknown_student: "לא מצאנו אותך ברשימת האוניברסיטה.",
+      survey_missing: "יש לענות על הסקר לפני בחירת מתנה.",
     },
+  },
+
+  survey: {
+    title: "סקר",
+    intro: "לפני בחירת המתנה יש לענות על הסקר. אחרי השליחה אי אפשר לשנות את התשובות.",
+    submit: "שלח",
+    submitFemale: "שלחי",
+    required: "חובה",
+    errors: { required: "יש לענות על השאלה.", invalid: "התשובה אינה תקינה." },
+    thanks: "תודה. התשובות נשמרו.",
   },
 
   staff: {
@@ -153,6 +165,11 @@ function layout(body: string, wide = false): string {
   table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
   th, td { border-block-end: 1px solid #e3e5ea; padding: 0.4rem; text-align: start; }
   section { margin-block-start: 1.5rem; }
+  fieldset.question { border: 1px solid #d6d8de; border-radius: 10px; margin-block-end: 1rem; }
+  fieldset.question legend { color: #1b1b1f; font-weight: 600; padding-inline: 0.3rem; }
+  .option { display: block; padding-block: 0.3rem; }
+  .option input { width: auto; margin-inline-end: 0.4rem; }
+  textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.5rem; }
 </style>
 </head>
 <body><main${wide ? ' class="wide"' : ""}>${body}</main></body>
@@ -257,6 +274,51 @@ ${notice(message)}`;
 <h2>${T.student.choose}</h2>
 <p class="hint">${T.student.chooseHint}</p>
 <div class="gifts">${cards}</div>`);
+}
+
+/**
+ * Request 22. Shown instead of the gifts until the student submits it. On an error, the
+ * page comes back with every answer the student gave, so nothing has to be typed twice.
+ */
+export function surveyPage(
+  s: StudentView,
+  survey: Survey,
+  state: { values?: Record<string, unknown>; errors?: Record<string, "required" | "invalid"> } = {},
+): string {
+  const female = isFemale(s.gender);
+  const values = state.values ?? {};
+  const has = (q: Question, v: string) => {
+    const raw = values[q.id];
+    return Array.isArray(raw) ? raw.map(String).includes(v) : raw === v;
+  };
+
+  const fields = survey.questions
+    .map((q) => {
+      const label = (female && q.labelFemale) || q.label;
+      const mark = q.required ? ` <span class="hint">(${T.survey.required})</span>` : "";
+      const error = state.errors?.[q.id] ? `<p class="error">${T.survey.errors[state.errors[q.id]]}</p>` : "";
+      let input: string;
+      if (q.kind === "text") {
+        input = `<textarea name="${esc(q.id)}" rows="3" maxlength="1000">${esc(values[q.id])}</textarea>`;
+      } else {
+        const type = q.kind === "choice" ? "radio" : "checkbox";
+        input = q.options
+          .map(
+            (o) =>
+              `<label class="option"><input type="${type}" name="${esc(q.id)}" value="${esc(o.value)}"${has(q, o.value) ? " checked" : ""}> ${esc(o.label)}</label>`,
+          )
+          .join("");
+      }
+      return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${error}${input}</fieldset>`;
+    })
+    .join("\n");
+
+  return layout(`<div class="bar"><h1>${T.survey.title}</h1>${logoutForm(s.gender)}</div>
+<p>${T.survey.intro}</p>
+<form method="post" action="/student/survey">
+${fields}
+<button class="button">${female ? T.survey.submitFemale : T.survey.submit}</button>
+</form>`);
 }
 
 /** The selection is final (request 3), so it takes a second, explicit step. */

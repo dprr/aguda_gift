@@ -5,9 +5,10 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
 import { markTaken, selectGift } from "./gifts.ts";
-import { confirmPage, demoBanner, esc, lapsedText, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, T, when } from "./pages.ts";
+import { confirmPage, demoBanner, esc, lapsedText, loginPage, type Notice, type RefusalReason, staffPage, type StudentError, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
+import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 
 export type Session = { kind: "student"; nationalId: string } | { kind: "staff"; email: string };
@@ -23,6 +24,8 @@ export type AppOptions = {
    * source in production, and puts a banner on every page. Never set it with real data.
    */
   demo?: boolean;
+  /** Request 22. Defaults to the live SURVEY; tests pass their own. */
+  survey?: Survey;
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
   origin: string;
 };
@@ -32,6 +35,7 @@ const OAUTH_COOKIE = "oauth";
 const SESSION_HOURS = 12; // one desk shift
 
 export async function buildApp(options: AppOptions) {
+  const survey = options.survey ?? SURVEY;
   if (options.production && options.devLogin && !options.demo) {
     throw new Error("DEV_LOGIN must be off in production");
   }
@@ -222,7 +226,7 @@ export async function buildApp(options: AppOptions) {
   // Every student route acts on the session's own national ID, never on one from the
   // request (plan §6: a student reads and writes only its own row).
 
-  app.get<{ Querystring: { saved?: string; error?: string } }>(
+  app.get<{ Querystring: { saved?: string; error?: string; surveyed?: string } }>(
     "/student",
     { preHandler: requireKind("student") },
     async (request, reply) => {
@@ -231,9 +235,13 @@ export async function buildApp(options: AppOptions) {
         reply.clearCookie(SESSION_COOKIE, { path: "/" });
         return reply.redirect("/");
       }
-      const { saved, error } = request.query;
+      // Request 22: member or not, the survey comes first.
+      if (!s.survey_submitted) return html(reply, surveyPage(s, survey));
+
+      const { saved, error, surveyed } = request.query;
       let message: Notice | undefined;
-      if (saved) message = { kind: "ok", text: T.student.saved };
+      if (surveyed) message = { kind: "ok", text: T.survey.thanks };
+      else if (saved) message = { kind: "ok", text: T.student.saved };
       else if (error && error in T.student.errors) {
         message = { kind: "error", text: T.student.errors[error as StudentError] };
       }
@@ -248,7 +256,8 @@ export async function buildApp(options: AppOptions) {
       const gift = (await listGifts()).find((g) => g.id === Number(request.query.gift));
       if (!gift) return reply.redirect("/student?error=unknown_gift");
       const s = await findStudent(studentId(request));
-      return html(reply, confirmPage(gift, s?.gender ?? null));
+      if (!s?.survey_submitted) return reply.redirect("/student");
+      return html(reply, confirmPage(gift, s.gender));
     },
   );
 
@@ -258,6 +267,23 @@ export async function buildApp(options: AppOptions) {
     async (request, reply) => {
       const result = await selectGift(studentId(request), Number(request.body?.gift_id));
       return reply.redirect(result.ok ? "/student?saved=1" : `/student?error=${result.reason}`);
+    },
+  );
+
+  app.post<{ Body: Record<string, unknown> }>(
+    "/student/survey",
+    { preHandler: requireKind("student") },
+    async (request, reply) => {
+      const body = request.body ?? {};
+      const checked = validate(survey, body);
+      if (!checked.ok) {
+        const s = await findStudent(studentId(request));
+        if (!s) return reply.redirect("/");
+        return html(reply, surveyPage(s, survey, { values: body, errors: checked.errors }));
+      }
+      // Submitted is final: a second submission changes nothing (owner's decision).
+      const result = await submitSurvey(studentId(request), survey, checked.answers);
+      return reply.redirect(result.ok ? "/student?surveyed=1" : "/student");
     },
   );
 

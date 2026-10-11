@@ -4,7 +4,7 @@ export type SelectResult =
   | { ok: true; giftId: number }
   | {
       ok: false;
-      reason: "unknown_student" | "not_member" | "already_selected" | "unknown_gift" | "sold_out";
+      reason: "unknown_student" | "not_member" | "already_selected" | "unknown_gift" | "sold_out" | "survey_missing";
     };
 
 /**
@@ -22,19 +22,25 @@ export async function selectGift(nationalId: string, giftId: number): Promise<Se
     }
 
     // 1. Write-once. Runs first, so a retry or a double tap stops here and never
-    //    touches the shared gifts row.
+    //    touches the shared gifts row. The survey must be submitted first (request 22).
     const chose = await db.query(
       `UPDATE students SET gift_id = $2
-        WHERE national_id = $1 AND member IS TRUE AND gift_id IS NULL`,
+        WHERE national_id = $1 AND member IS TRUE AND gift_id IS NULL AND survey IS NOT NULL`,
       [nationalId, giftId],
     );
     if (chose.rowCount === 0) {
       const row = await db.query(
-        "SELECT member, gift_id FROM students WHERE national_id = $1",
+        "SELECT member, gift_id, survey IS NOT NULL AS surveyed FROM students WHERE national_id = $1",
         [nationalId],
       );
       const s = row.rows[0];
-      const reason = !s ? "unknown_student" : s.gift_id !== null ? "already_selected" : "not_member";
+      const reason = !s
+        ? "unknown_student"
+        : s.gift_id !== null
+          ? "already_selected"
+          : !s.surveyed
+            ? "survey_missing"
+            : "not_member";
       throw new Rollback<SelectResult>({ ok: false, reason });
     }
 
