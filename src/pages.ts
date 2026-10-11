@@ -463,6 +463,11 @@ export function surveyPage(
       let input: string;
       if (q.kind === "text") {
         input = `<textarea name="${esc(q.id)}" rows="3" maxlength="1000">${esc(values[q.id])}</textarea>`;
+      } else if (q.kind === "choice" && q.dropdown) {
+        const options = q.options
+          .map((o) => `<option value="${esc(o.value)}"${has(q, o.value) ? " selected" : ""}>${esc((female && o.labelFemale) || o.label)}</option>`)
+          .join("");
+        input = `<select name="${esc(q.id)}"><option value="">${female ? T.survey.pickFemale : T.survey.pick}</option>${options}</select>`;
       } else {
         const type = q.kind === "choice" ? "radio" : "checkbox";
         input = q.options

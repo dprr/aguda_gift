@@ -173,16 +173,40 @@ describe("the live survey", () => {
 
   test('"אחר" requires its text, and the text is stored beside the choice', async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
-    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes" };
+    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes", elections: "pirates" };
     const missing = validate(LIVE, { ...base, fences: "other", fences_text: "  " });
     assert.deepEqual(!missing.ok && missing.errors, { fences: "required" });
 
     const given = validate(LIVE, { ...base, fences: "other", fences_text: " דעה אחרת " });
-    assert.deepEqual(given, { ok: true, answers: { fences: "other", fences_text: "דעה אחרת", ...base } });
+    assert.deepEqual(given, { ok: true, answers: { fences: ["other"], fences_text: "דעה אחרת", ...base } });
 
     // The text of an option that was not chosen is dropped.
     const ignored = validate(LIVE, { ...base, fences: "disaster", fences_text: "leftover" });
-    assert.deepEqual(ignored, { ok: true, answers: { fences: "disaster", ...base } });
+    assert.deepEqual(ignored, { ok: true, answers: { fences: ["disaster"], ...base } });
+  });
+
+  test("fences takes several answers, at least one, and \"אחר\" still needs its text", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes", elections: "pirates" };
+    const two = validate(LIVE, { ...base, fences: ["disaster", "technion"] });
+    assert.ok(two.ok && JSON.stringify(two.answers.fences) === '["disaster","technion"]');
+    const none = validate(LIVE, { ...base });
+    assert.deepEqual(!none.ok && none.errors, { fences: "required" });
+    const otherEmpty = validate(LIVE, { ...base, fences: ["disaster", "other"], fences_text: "" });
+    assert.deepEqual(!otherEmpty.ok && otherEmpty.errors, { fences: "required" });
+    const otherGiven = validate(LIVE, { ...base, fences: ["disaster", "other"], fences_text: "גדר" });
+    assert.ok(otherGiven.ok && otherGiven.answers.fences_text === "גדר");
+  });
+
+  test("the elections question is a required dropdown with the two owner's options", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const base = { fences: "disaster", father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes" };
+    const empty = validate(LIVE, { ...base, elections: "" });
+    assert.deepEqual(!empty.ok && empty.errors, { elections: "required" });
+    const fake = validate(LIVE, { ...base, elections: "likud" });
+    assert.deepEqual(!fake.ok && fake.errors, { elections: "invalid" });
+    const ok = validate(LIVE, { ...base, elections: "throw_away" });
+    assert.ok(ok.ok && ok.answers.elections === "throw_away");
   });
 
   test("an option's wording follows the student's gender", async () => {
@@ -204,6 +228,10 @@ describe("the live survey", () => {
     assert.match(him, /שוקל לעבור לטכניון/, "unknown gender is masculine");
     assert.match(him, /מה אתה חושב על/);
     assert.match(him, /האם אתה צופה ליהנות/);
+    assert.match(her, /<input type="checkbox" name="fences" value="disaster">/, "fences takes several answers");
+    assert.match(her, /למי תצביעי בבחירות הקרובות\?/);
+    assert.match(him, /למי תצביע בבחירות הקרובות\?/);
+    assert.match(her, /<select name="elections"><option value="">בחרי<\/option><option value="pirates">הפיראטים<\/option>/);
     // The owner's rules: never the plural אתם, and the spelling ליהנות.
     for (const html of [her, him]) {
       assert.doesNotMatch(html, /אתם/);
@@ -213,7 +241,7 @@ describe("the live survey", () => {
 });
 
 describe("the five questions of version 3", () => {
-  const base = { fences: "disaster", father: "no", welfare: "no", reserve: "yes", special: "no", social: "no" };
+  const base = { fences: "disaster", father: "no", welfare: "no", reserve: "yes", special: "no", social: "no", elections: "pirates" };
 
   test("a dorm is required after כן, must be a real dorm, and is dropped after לא", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");

@@ -32,7 +32,8 @@ export type Option = {
 };
 export type Question =
   | (Base & { kind: "text"; campusSocial?: boolean })
-  | (Base & { kind: "choice"; options: Option[]; campusSocial?: boolean }) // exactly one
+  // exactly one. dropdown: a <select> box instead of radio buttons; its options take no follow-up.
+  | (Base & { kind: "choice"; options: Option[]; campusSocial?: boolean; dropdown?: boolean })
   | (Base & { kind: "multi"; options: Option[]; campusSocial?: boolean }); // any number
 // campusSocial: show the Aguda Instagram and WhatsApp links of the student's own campus.
 
@@ -66,13 +67,14 @@ const YES_NO: Option[] = [
  * The live survey, as supplied by the owner on 2026-10-11.
  * Version 2: singular, gendered wording instead of אתם, and the spelling ליהנות.
  * Version 3: five more questions.
+ * Version 4: fences takes several answers; the elections question, as a dropdown.
  */
 export const SURVEY: Survey = {
-  version: 3,
+  version: 4,
   questions: [
     {
       id: "fences",
-      kind: "choice",
+      kind: "multi", // at least one, because required
       label: "מה אתה חושב על הגדרות החדשות בגבעת רם?",
       labelFemale: "מה את חושבת על הגדרות החדשות בגבעת רם?",
       required: true,
@@ -135,6 +137,18 @@ export const SURVEY: Survey = {
       required: true,
       campusSocial: true,
       options: YES_NO,
+    },
+    {
+      id: "elections",
+      kind: "choice",
+      dropdown: true,
+      label: "למי תצביע בבחירות הקרובות?",
+      labelFemale: "למי תצביעי בבחירות הקרובות?",
+      required: true,
+      options: [
+        { value: "pirates", label: "הפיראטים" },
+        { value: "throw_away", label: "אזרוק את הקול שלי לאנשים שלא אכפת ממני" },
+      ],
     },
     {
       id: "more",
