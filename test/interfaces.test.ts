@@ -290,7 +290,7 @@ describe("manager page", () => {
 
   test("a manager adds a worker, and the worker can then log in", async () => {
     const cookies = await asManager();
-    const res = await app.inject({ method: "POST", url: "/manager/workers/add", cookies, ...form({ email: " New@Mail.HUJI.ac.il " }) });
+    const res = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email: " New@Mail.HUJI.ac.il ", role: "worker" }) });
     assert.equal(res.headers.location, "/manager?done=added");
     assert.equal(await notice(res.headers.location as string, cookies), "הוספנו את העובד.");
     assert.deepEqual(await workers(), ["dana@aguda.org.il", "new@mail.huji.ac.il"]);
@@ -305,7 +305,7 @@ describe("manager page", () => {
       ["dana@aguda.org.il", "exists"],
       ["BOSS@aguda.org.il", "manager"],
     ]) {
-      const res = await app.inject({ method: "POST", url: "/manager/workers/add", cookies, ...form({ email }) });
+      const res = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role: "worker" }) });
       assert.equal(res.headers.location, `/manager?error=${error}`, email);
     }
     assert.deepEqual(await workers(), ["dana@aguda.org.il"]);
@@ -316,6 +316,33 @@ describe("manager page", () => {
     await migrate();
     assert.equal((await pool.query("SELECT role FROM staff WHERE email = 'old@aguda.org.il'")).rows[0].role, "worker");
     assert.equal((await pool.query("SELECT to_regclass('workers') AS t")).rows[0].t, null);
+  });
+
+  test("a manager adds a manager, who can then open the manager page (request 28)", async () => {
+    const cookies = await asManager();
+    const res = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email: "Second@aguda.org.il", role: "manager" }) });
+    assert.equal(res.headers.location, "/manager?done=added_manager");
+    assert.equal(await notice(res.headers.location as string, cookies), "הוספנו את המנהל.");
+    const second = await login({ kind: "staff", email: "second@aguda.org.il" });
+    assert.equal((await app.inject({ url: "/manager", cookies: second })).statusCode, 200);
+  });
+
+  test("adding a worker as a manager promotes the worker; a manager is never demoted", async () => {
+    const cookies = await asManager();
+    const add = (email: string, role: string) =>
+      app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role }) });
+    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?done=promoted");
+    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?error=manager");
+    assert.equal((await add("dana@aguda.org.il", "worker")).headers.location, "/manager?error=manager");
+    assert.equal((await add("x@aguda.org.il", "admin")).headers.location, "/manager?error=invalid_role");
+    assert.equal((await add("x@gmail.com", "manager")).headers.location, "/manager?error=wrong_domain");
+    const roles = (await pool.query("SELECT email, role FROM staff ORDER BY email")).rows;
+    assert.deepEqual(roles, [{ email: "boss@aguda.org.il", role: "manager" }, { email: "dana@aguda.org.il", role: "manager" }]);
+  });
+
+  test("the add form offers both roles, worker first", async () => {
+    const res = await app.inject({ url: "/manager", cookies: await asManager() });
+    assert.match(res.body, /<select name="role"><option value="worker">עובד<\/option><option value="manager">מנהל<\/option><\/select>/);
   });
 
   test("the manager page cannot remove a manager", async () => {
@@ -344,7 +371,7 @@ describe("manager page", () => {
   test("a worker cannot use any manager route, and nothing changes", async () => {
     const cookies = await asStaff();
     for (const [url, body] of [
-      ["/manager/workers/add", { email: "x@aguda.org.il" }],
+      ["/manager/staff/add", { email: "x@aguda.org.il", role: "manager" }],
       ["/manager/workers/remove", { email: "dana@aguda.org.il" }],
       ["/manager/stock", { gift_id: "1", starting_inventory: "99" }],
     ] as const) {

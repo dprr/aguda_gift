@@ -10,7 +10,7 @@ import { markTaken, selectGift } from "./gifts.ts";
 import { confirmPage, demoBanner, esc, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
-import { addWorker, listStaff, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
+import { addStaff, listStaff, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 import { UniversitySource } from "./university.ts";
@@ -434,12 +434,12 @@ export async function buildApp(options: AppOptions) {
     },
   );
 
-  app.post<{ Body: { email?: string } }>(
-    "/manager/workers/add",
+  app.post<{ Body: { email?: string; role?: string } }>(
+    "/manager/staff/add",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      const result = await addWorker(request.body?.email ?? "", options.domains.staff);
-      return reply.redirect(result.ok ? "/manager?done=added" : `/manager?error=${result.reason}`);
+      const result = await addStaff(request.body?.email ?? "", request.body?.role ?? "", options.domains.staff);
+      return reply.redirect(result.ok ? `/manager?done=${result.done}` : `/manager?error=${result.reason}`);
     },
   );
 

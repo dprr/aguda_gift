@@ -1,8 +1,8 @@
 /**
- * Requests 24 and 25. Every employee is a row in `staff`, marked manager or worker. Both
- * use the staff login page and the distribution desk; only a manager opens the manager
- * page. Managers add and remove workers there. Managers themselves are added from the
- * command line, at the end of this file, so the first manager needs no screen.
+ * Requests 24, 25, and 28. Every employee is a row in `staff`, marked manager or worker.
+ * Both use the staff login page and the distribution desk; only a manager opens the
+ * manager page. There, managers add workers and managers, and remove workers. The command
+ * line, at the end of this file, adds the first manager and removes managers.
  */
 import { pool } from "./db.ts";
 
@@ -34,18 +34,38 @@ function checkEmail(email: string, staffDomains: string[]): { ok: true; email: s
   return { ok: true, email: e };
 }
 
-export type AddWorkerResult = { ok: true } | { ok: false; reason: "invalid" | "wrong_domain" | "manager" | "exists" };
+export type AddStaffResult =
+  | { ok: true; done: "added" | "added_manager" | "promoted" }
+  | { ok: false; reason: "invalid" | "wrong_domain" | "manager" | "exists" | "invalid_role" };
 
-/** Staff log in with a university or an Aguda account, so a worker needs one of those. */
-export async function addWorker(email: string, staffDomains: string[]): Promise<AddWorkerResult> {
+/**
+ * A manager adds a worker or a manager (request 28). Adding a worker as a manager promotes
+ * the worker. Nothing here demotes a manager, and only the command line removes one.
+ * Staff log in with a university or an Aguda account, so the address needs one of those.
+ */
+export async function addStaff(email: string, role: string, staffDomains: string[]): Promise<AddStaffResult> {
+  if (role !== "worker" && role !== "manager") return { ok: false, reason: "invalid_role" };
   const checked = checkEmail(email, staffDomains);
   if (!checked.ok) return checked;
+
+  if (role === "worker") {
+    const r = await pool.query(
+      "INSERT INTO staff (email, role) VALUES ($1, 'worker') ON CONFLICT DO NOTHING",
+      [checked.email],
+    );
+    if (r.rowCount) return { ok: true, done: "added" };
+    return { ok: false, reason: (await roleOf(checked.email)) === "manager" ? "manager" : "exists" };
+  }
+
+  // One statement: insert a new manager, or promote a worker. xmax = 0 marks an insert.
   const r = await pool.query(
-    "INSERT INTO staff (email, role) VALUES ($1, 'worker') ON CONFLICT DO NOTHING",
+    `INSERT INTO staff (email, role) VALUES ($1, 'manager')
+     ON CONFLICT (email) DO UPDATE SET role = 'manager' WHERE staff.role = 'worker'
+     RETURNING xmax = 0 AS inserted`,
     [checked.email],
   );
-  if (r.rowCount) return { ok: true };
-  return { ok: false, reason: (await roleOf(checked.email)) === "manager" ? "manager" : "exists" };
+  if (!r.rowCount) return { ok: false, reason: "manager" };
+  return { ok: true, done: r.rows[0].inserted ? "added_manager" : "promoted" };
 }
 
 /** Workers only. The manager page cannot remove a manager. */

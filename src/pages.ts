@@ -151,8 +151,9 @@ export const T = {
     staff: "צוות",
     staffCols: ["דוא\"ל", "תפקיד", ""],
     roles: { manager: "מנהל", worker: "עובד" },
-    managersHint: "כדי להוסיף מנהל או להסיר מנהל, פנה למפתח.",
-    newWorker: "כתובת דוא\"ל של עובד חדש, בחשבון של האוניברסיטה או של האגודה",
+    managersHint: "כדי להסיר מנהל, פנה למפתח.",
+    newStaff: "כתובת דוא\"ל, בחשבון של האוניברסיטה או של האגודה",
+    role: "תפקיד",
     add: "הוסף",
     remove: "הסר",
     stock: "מלאי",
@@ -161,6 +162,8 @@ export const T = {
     save: "שמור",
     done: {
       added: "הוספנו את העובד.",
+      added_manager: "הוספנו את המנהל.",
+      promoted: "העובד הוא עכשיו מנהל.",
       removed: "הסרנו את העובד.",
       stock: "שמרנו את המלאי.",
     },
@@ -170,6 +173,7 @@ export const T = {
       manager: "הכתובת הזו שייכת למנהל.",
       exists: "העובד כבר ברשימה.",
       not_found: "העובד אינו ברשימה.",
+      invalid_role: "התפקיד אינו תקין.",
       invalid_stock: "הזן מספר שלם, 0 או יותר.",
       unknown_gift: "לא מצאנו את המתנה.",
       below_requested: "סטודנטים כבר בחרו במתנה הזו יותר פעמים מהמספר שהזנת. הזן לפחות",
@@ -660,8 +664,9 @@ ${notice(message)}
 <section><h2>${M.staff}</h2>
 <table><thead><tr>${M.staffCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${staffRows}</tbody></table>
 <p class="hint">${M.managersHint}</p>
-<form method="post" action="/manager/workers/add">
-  <label>${M.newWorker}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
+<form method="post" action="/manager/staff/add">
+  <label>${M.newStaff}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
+  <label>${M.role} <select name="role"><option value="worker">${M.roles.worker}</option><option value="manager">${M.roles.manager}</option></select></label>
   <button class="button">${M.add}</button>
 </form>
 </section>
