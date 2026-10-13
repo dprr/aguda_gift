@@ -147,7 +147,7 @@ export const SURVEY: Survey = {
       required: true,
       options: [
         { value: "pirates", label: "הפיראטים" },
-        { value: "throw_away", label: "אזרוק את הקול שלי לאנשים שלא אכפת ממני" },
+        { value: "throw_away", label: "אזרוק את הקול שלי לאנשים שלא אכפת להם ממני" },
       ],
     },
     {
