@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
-import { AGUDA_SOCIAL, CAMPUS_SOCIAL, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
+import { AGUDA_SOCIAL, CAMPUS_SOCIAL, campusLabel, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -429,8 +429,8 @@ export function surveyPage(
   };
 
   /**
-   * Aguda's general links for everyone, then the links of the student's own campus. A
-   * campus listed without WhatsApp invites the student to start a group.
+   * Aguda's general links for everyone, then the links of each of the student's campuses
+   * (request 27). A campus listed without WhatsApp invites the student to start a group.
    */
   const links = (q: Question): string => {
     if (!q.campusSocial) return "";
@@ -442,9 +442,10 @@ export function surveyPage(
     };
     const all: Social = AGUDA_SOCIAL;
     let out = line([all.instagram && a(all.instagram, T.survey.instagramAll), all.whatsapp && a(all.whatsapp, T.survey.whatsappAll)]);
-    const c = s.campus ? CAMPUS_SOCIAL[s.campus] : undefined;
-    if (c) {
-      const campus = esc(s.campus);
+    for (const name of s.campuses) {
+      const c = CAMPUS_SOCIAL[name];
+      if (!c) continue;
+      const campus = esc(campusLabel(name));
       out += line([
         c.instagram && a(c.instagram, `${T.survey.instagram} ${campus}`),
         c.whatsapp

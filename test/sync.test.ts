@@ -37,61 +37,60 @@ test("a repeated sync of identical data writes nothing", async () => {
   assert.deepEqual(afterRows.rows, before.rows);
 });
 
-test("first sight stores the membership the source reports, never an assumed true", async () => {
-  const students = fakeStudents(3).map((s, i) => ({ ...s, member: [true, false, null][i] }));
+test("everyone on the list is a member from the first sight (request 27)", async () => {
+  const students = fakeStudents(3);
   await sync(new FakeSource(students));
-
-  for (const [i, expected] of [true, false, null].entries()) {
-    const s = await student(students[i].national_id);
-    assert.equal(s.member, expected);
-    assert.equal(s.membership_history.length, 1);
-    assert.equal(s.membership_history[0].member, expected);
+  for (const { national_id } of students) {
+    const s = await student(national_id);
+    assert.equal(s.member, true);
+    assert.deepEqual(s.membership_history.map((e: { member: boolean }) => e.member), [true]);
   }
 });
 
-test("membership changes append to the history, and rejoining is preserved", async () => {
-  const students = fakeStudents(1).map((s) => ({ ...s, member: true }));
-  const source = new FakeSource(students);
+test("leaving the list ends the membership, and rejoining restores it, in the history", async () => {
+  const source = new FakeSource(fakeStudents(2));
   await sync(source);
+  const [stays, leaves] = source.students;
 
-  source.students[0].member = false;
+  source.students = [stays];
   const left = await sync(source);
-  source.students[0].member = true;
+  source.students = [stays, leaves];
   const rejoined = await sync(source);
 
   assert.equal(left.ok && left.membershipChanged, 1);
   assert.equal(rejoined.ok && rejoined.membershipChanged, 1);
-  const s = await student(students[0].national_id);
+  const s = await student(leaves.national_id);
   assert.deepEqual(s.membership_history.map((e: { member: boolean }) => e.member), [true, false, true]);
   assert.equal(s.member, true);
+  assert.equal((await student(stays.national_id)).membership_history.length, 1);
 });
 
 test("a profile change updates the column and adds no membership history", async () => {
   const source = new FakeSource(fakeStudents(1));
   await sync(source);
-  source.students[0].faculty = "משפטים";
+  source.students[0].campuses = ["הר הצופים", "רחובות"];
 
   const result = await sync(source);
 
   assert.equal(result.ok && result.profileChanged, 1);
   assert.equal(result.ok && result.membershipChanged, 0);
   const s = await student(source.students[0].national_id);
-  assert.equal(s.faculty, "משפטים");
+  assert.deepEqual(s.campuses, ["הר הצופים", "רחובות"]);
   assert.equal(s.membership_history.length, 1);
 });
 
-test("a student absent from the response is left untouched and never deleted", async () => {
+test("a student absent from the response is never deleted, and keeps the profile", async () => {
   const source = new FakeSource(fakeStudents(10));
   await sync(source);
-  const gone = source.students[9].national_id;
-  const before = await pool.query("SELECT xmin, * FROM students WHERE national_id = $1", [gone]);
+  const gone = source.students[9];
 
   source.students = source.students.slice(0, 9);
   await sync(source);
 
   assert.equal(await countStudents(), 10);
-  const afterRow = await pool.query("SELECT xmin, * FROM students WHERE national_id = $1", [gone]);
-  assert.deepEqual(afterRow.rows, before.rows);
+  const s = await student(gone.national_id);
+  assert.equal(s.member, false);
+  assert.equal(s.first_name, gone.first_name);
 });
 
 test("university email is stored lowercase", async () => {
@@ -102,7 +101,7 @@ test("university email is stored lowercase", async () => {
 
 test("a response below the minimum is refused and writes nothing", async () => {
   await sync(new FakeSource(fakeStudents(100)));
-  const source = new FakeSource(fakeStudents(50).map((s) => ({ ...s, member: false })));
+  const source = new FakeSource(fakeStudents(50)); // half the list: a cut-off response
 
   const result = await sync(source, 80);
 

@@ -13,6 +13,7 @@ import { startSyncSchedule } from "./schedule.ts";
 import { addWorker, listStaff, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
+import { UniversitySource } from "./university.ts";
 
 export type Session = { kind: "student"; nationalId: string } | { kind: "staff"; email: string };
 
@@ -360,6 +361,10 @@ export async function buildApp(options: AppOptions) {
   );
 
   // ---- staff --------------------------------------------------------------------------
+  // The university sends the national ID as a number, so an ID with leading zeros is
+  // stored without them. The desk drops them too, so either spelling finds the student.
+  const deskId = (value: string | undefined) => (value ?? "").trim().replace(/^0+/, "");
+
   // The national ID always travels in a POST body, so it never enters a URL, a browser
   // history, or an access log (plan §12). So search answers with a page, not a redirect.
 
@@ -371,7 +376,7 @@ export async function buildApp(options: AppOptions) {
     "/staff/lookup",
     { preHandler: requireStaff() },
     async (request, reply) => {
-      const id = (request.body?.national_id ?? "").trim();
+      const id = deskId(request.body?.national_id);
       const student = id ? await findStudent(id) : null;
       return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: id !== "" }));
     },
@@ -381,7 +386,7 @@ export async function buildApp(options: AppOptions) {
     "/staff/take",
     { preHandler: requireStaff() },
     async (request, reply) => {
-      const id = (request.body?.national_id ?? "").trim();
+      const id = deskId(request.body?.national_id);
       const result = await markTaken(id);
       const student = await findStudent(id);
 
@@ -505,7 +510,8 @@ if (import.meta.main) {
     }
     source = new FakeSource(fakeStudents(Number(process.env.FAKE_STUDENTS ?? 2000)));
   } else if (syncSource === "university") {
-    throw new Error("SYNC_SOURCE=university needs the VBA port, which is milestone M6");
+    // Request 27. HUJI_CURRENT_YEAR has no default, so a stale year is never used silently.
+    source = new UniversitySource({ key: env("HUJI_API_KEY"), year: Number(env("HUJI_CURRENT_YEAR")) });
   } else if (syncSource !== "") {
     throw new Error(`unknown SYNC_SOURCE: ${syncSource}`);
   }

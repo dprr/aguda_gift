@@ -7,8 +7,8 @@ export type StudentView = {
   first_name: string | null;
   last_name: string | null;
   gender: string | null;
-  faculty: string | null;
-  campus: string | null;
+  /** The university's campus names. Request 27: a student can have several. */
+  campuses: string[];
   member: boolean | null;
   member_changed_at: Date | null;
   gift_id: number | null;
@@ -21,7 +21,7 @@ export type StudentView = {
 
 export async function findStudent(nationalId: string): Promise<StudentView | null> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.faculty, s.campus, s.member,
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.campuses, s.member,
             s.member_changed_at, s.gift_id, g.name AS gift_name, s.gift_taken_at,
             s.interactions, s.survey IS NOT NULL AS survey_submitted
        FROM students s LEFT JOIN gifts g ON g.id = s.gift_id

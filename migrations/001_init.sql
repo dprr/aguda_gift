@@ -26,20 +26,10 @@ CREATE TABLE IF NOT EXISTS students (
   gender             text,
   phone              text,
 
-  -- §4.2 academic, request 17. All text: source types are unconfirmed
-  faculty            text,
-  parent_faculty     text,
-  study_year         text,
-  campus             text,
+  -- Requests 17 and 27. As the university list gives them; see 005_university.sql
   special_population text,
-  program            text,
-  program_code       text,
-  department         text,
-  department_code    text,
-  track              text,
-  track_code         text,
-  year_in_track      text,
-  track_scope        text,
+  campuses           text[] NOT NULL DEFAULT '{}',
+  programs           jsonb  NOT NULL DEFAULT '[]',
 
   -- state
   member             boolean,                      -- null means unknown

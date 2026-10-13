@@ -3,7 +3,11 @@
  * integration (M6) is one new implementation and no other change.
  */
 
-/** One record from the university list. Every field except the ID may be absent (§3.1). */
+/**
+ * One student from the university list, after duplicates are merged (university.ts).
+ * Request 27: every student on the list is an Aguda member, so the record holds no
+ * membership field. The sync derives membership from presence on the list.
+ */
 export type SourceStudent = {
   national_id: string;
   university_email: string | null;
@@ -11,46 +15,27 @@ export type SourceStudent = {
   last_name: string | null;
   gender: string | null;
   phone: string | null;
-  faculty: string | null;
-  parent_faculty: string | null;
-  study_year: string | null;
-  campus: string | null;
   special_population: string | null;
-  program: string | null;
-  program_code: string | null;
-  department: string | null;
-  department_code: string | null;
-  track: string | null;
-  track_code: string | null;
-  year_in_track: string | null;
-  track_scope: string | null;
-  member: boolean | null;
+  /** The university's campus names, sorted. */
+  campuses: string[];
+  /** One entry per university record, with its academic fields as the university names them. */
+  programs: Record<string, unknown>[];
 };
 
 export interface StudentSource {
   fetchStudents(): Promise<SourceStudent[]>;
 }
 
-/** The profile and academic columns, in one fixed order. The sync compares these. */
+/** The profile columns, in one fixed order, with their SQL types. The sync compares these. */
 export const PROFILE_COLUMNS = [
-  "university_email",
-  "first_name",
-  "last_name",
-  "gender",
-  "phone",
-  "faculty",
-  "parent_faculty",
-  "study_year",
-  "campus",
-  "special_population",
-  "program",
-  "program_code",
-  "department",
-  "department_code",
-  "track",
-  "track_code",
-  "year_in_track",
-  "track_scope",
+  ["university_email", "text"],
+  ["first_name", "text"],
+  ["last_name", "text"],
+  ["gender", "text"],
+  ["phone", "text"],
+  ["special_population", "text"],
+  ["campuses", "text[]"],
+  ["programs", "jsonb"],
 ] as const;
 
 // ---------------------------------------------------------------------------------------
@@ -65,7 +50,7 @@ const FACULTIES = [
   { faculty: "מדעי הרוח", campus: "הר הצופים" },
   { faculty: "מדעי החברה", campus: "הר הצופים" },
   { faculty: "משפטים", campus: "הר הצופים" },
-  { faculty: "מתמטיקה ומדעי הטבע", campus: "גבעת רם" },
+  { faculty: "מתמטיקה ומדעי הטבע", campus: "אדמונד י' ספרא" },
   { faculty: "רפואה", campus: "עין כרם" },
   { faculty: "חקלאות, מזון וסביבה", campus: "רחובות" },
 ];
@@ -89,7 +74,7 @@ function mulberry32(seed: number): () => number {
  * repeated fetch returns byte-identical data (plan §8).
  *
  * National IDs run 100000001, 100000002, … so a test can name a student directly.
- * About 30% are members, 60% are not, and 10% are unknown.
+ * The shape follows the real list, so the fake data exercises the same code.
  */
 export function fakeStudents(count: number, seed = 1): SourceStudent[] {
   const rand = mulberry32(seed);
@@ -101,8 +86,6 @@ export function fakeStudents(count: number, seed = 1): SourceStudent[] {
     const f = pick(FACULTIES);
     const department = pick(DEPARTMENTS);
     const year = 1 + Math.floor(rand() * 4);
-    const roll = rand();
-
     const female = rand() < 0.5;
 
     students.push({
@@ -110,22 +93,17 @@ export function fakeStudents(count: number, seed = 1): SourceStudent[] {
       university_email: `student${i}@mail.huji.ac.il`,
       first_name: pick(female ? FIRST_FEMALE : FIRST_MALE),
       last_name: pick(LAST),
-      gender: female ? "נקבה" : "זכר",
+      gender: female ? "Female" : "Male",
       phone: `05${Math.floor(rand() * 1e8).toString().padStart(8, "0")}`,
-      faculty: f.faculty,
-      parent_faculty: f.faculty,
-      study_year: String(year),
-      campus: f.campus,
       special_population: null,
-      program: `תואר ראשון ב${department}`,
-      program_code: String(Math.floor(rand() * 1000)).padStart(4, "0"),
-      department,
-      department_code: String(Math.floor(rand() * 1000)).padStart(3, "0"),
-      track: "חד-חוגי",
-      track_code: "01",
-      year_in_track: String(year),
-      track_scope: "מלא",
-      member: roll < 0.3 ? true : roll < 0.9 ? false : null,
+      campuses: [f.campus],
+      programs: [{
+        faculty: f.faculty,
+        motherFacultyName: f.faculty,
+        academicYear: String(year),
+        learningProgramName: "בוגר",
+        roadMaps: [{ roadMapName: `מסלול כללי ב${department}`, departmentName: department, roadmapScope: "חד-חוגי" }],
+      }],
     });
   }
   return students;

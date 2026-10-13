@@ -142,22 +142,12 @@ One row per student. Current values in columns, two append-only arrays beside th
 | `last_name` | text, nullable | שם משפחה |
 | `gender` | text, nullable | מגדר |
 | `phone` | text, nullable | טלפון |
-| **Academic — §4.2** | | |
-| `faculty` | text, nullable | פקולטה |
-| `parent_faculty` | text, nullable | פקולטת אם |
-| `study_year` | text, nullable | שנת לימודים |
-| `campus` | text, nullable | קמפוס |
-| `special_population` | text, nullable | אוכלוסייה מיוחדת |
-| `program` | text, nullable | תוכנית לימודים |
-| `program_code` | text, nullable | קוד תוכנית |
-| `department` | text, nullable | שם חוג |
-| `department_code` | text, nullable | קוד חוג |
-| `track` | text, nullable | שם מסלול |
-| `track_code` | text, nullable | קוד מסלול |
-| `year_in_track` | text, nullable | שנה במסלול |
-| `track_scope` | text, nullable | היקף מסלול |
+| **University data — request 27** | | |
+| `special_population` | text, nullable | `specialPopulationsList`, as given. Used for special services |
+| `campuses` | text[] | `campousNameList`, split and sorted. A student can study at several campuses |
+| `programs` | jsonb, default `'[]'` | One entry per university record of the student: faculty, mother faculty, academic year, program, and the `roadMaps` (tracks), with the university's own field names |
 | **State** | | |
-| `member` | boolean, **nullable** | `true`, `false`, or `null` for unknown |
+| `member` | boolean, **nullable** | Request 27: `true` while the student is on the university list, `false` once absent |
 | `member_changed_at` | timestamptz | Shown beside the status, so staff see how old the data is |
 | `gift_id` | integer, fk `gifts`, nullable | The current selection. Null means none |
 | `gift_taken_at` | timestamptz, nullable | **Not null means the gift was handed over** |
@@ -167,35 +157,32 @@ One row per student. Current values in columns, two append-only arrays beside th
 | `membership_history` | jsonb, default `'[]'` | Append-only. Request 13. **Membership changes only** |
 | `interactions` | jsonb, default `'[]'` | Append-only. Request 18. Gift collection now, merchandise and Kossel later |
 
-Request 17 covers every column in the three §4.2 blocks above. Six §4.2 fields are
-**not** stored, each for a stated reason:
+Request 27 replaced the guessed §4.2 columns with the shape of the real service
+(`AgudaStudents` on `orbitapi.huji.ac.il`). Not stored, each for a stated reason:
 
 | Field | Why not |
 |---|---|
-| מזהה HUJI | HUJI uses the national ID as its student number, so it is `national_id` |
-| שם מלא, שם מלא באנגלית | `first_name` and `last_name` carry the name. A full name is those two joined |
-| מייל אישי, מייל מועדף | The HUJI address is the only one used. Google login matches on it |
-| מצב פרטי קשר | §4.2 says code meanings need confirming during integration. Nobody knows what this field means, so it serves no request |
+| `hujiGuide` | One identifier only: `national_id` |
+| `fNameENG`, `lNameENG` | The interfaces are Hebrew only |
+| `email` (personal) | The HUJI address is the only one used. The owner removed extra emails |
+| `campousCodesList` | `campuses` holds the names, which the code list only repeats |
 
-**Every university field is nullable and stored as `text`.** Two reasons, and both come
-from §0:
+**The service sends one record per faculty or program,** so 4,553 of 15,294 students
+arrived 2 to 5 times. `src/university.ts` merges the records of one national ID when the
+personal details match, and keeps every record's academic fields in `programs`. If the
+personal details differ, the whole response is refused.
 
-- §3.1 retrieves these *"where available"*, so any one of them can be absent.
-- §4.2 says *"The programmer must confirm source types"*. Nobody has seen the source. A
-  typed column needs a conversion rule and a failure path, and a failed conversion would
-  reject the whole student record. Text has neither.
+**The national ID arrives as a number,** so an ID with leading zeros arrives without
+them. It is stored as given, and the desk search drops leading zeros from what the
+employee types, so both spellings find the student.
 
-The codes — `program_code`, `department_code`, `track_code` — are text for the same
-reason §4.1 gives for the national ID: to preserve leading zeros.
-
-`study_year` and `year_in_track` are text, not integers, because the source may send
-`"2025/2026"` rather than a number. Convert them in Milestone 6, once a real response
-shows the format.
+**Campus names are the university's.** The app shows `אדמונד י' ספרא` as `גבעת רם`, the
+name students use (`campusLabel()` in `src/survey.ts`).
 
 The sync writes these columns, and §5.3 updates only the ones whose value differs.
 
 **No history for these columns.** Request 13 asks for a membership list only. A changed
-faculty overwrites the old value. See §13.
+program overwrites the old value. See §13.
 
 **One identifier, and that is all.** No surrogate key, and no HUJI ID. HUJI uses the
 national ID as its student number, so the two specification fields are one value.
@@ -475,11 +462,11 @@ during normal use, because that connection can fail and a desk must keep working
    12,000 rolls back records 1 to 11,999 as well.
 6. When `member` changes, append one entry to `membership_history` in the same statement
    that updates the column. That is request 13, and it is the only history kept.
-7. Students absent from the response are left **untouched**. **Never delete a student**,
-   and never mark one as gone, because there is no column for it.
-
-⚠️ **On first sight, store the membership status the source reports. Never assume
-`true`.** The university list holds every HUJI student, and most are not Aguda members.
+7. **Request 27: the list holds only Aguda members.** A student on the list is a member.
+   A student absent from the response becomes a non-member, with a history entry, and
+   rejoins as a member when the list includes the student again. **Never delete a
+   student.** The step 3 guard matters most here: a cut-off response would otherwise end
+   the membership of every student it misses.
 Assuming `true` would make all 23,000 eligible for a gift.
 
 **No `sync_runs` table, and no third table of any kind.** Nobody requested run records.
@@ -542,7 +529,8 @@ interface StudentSource {
 
 - `FakeSource` — invents Hebrew names, faculties, and membership states. Deterministic
   from a seed.
-- `UniversitySource` — the VBA port. Milestone 6.
+- `UniversitySource` — the university's REST service (request 27), in `src/university.ts`.
+  `npm run load-students -- <file.json>` syncs a saved response the same way.
 
 A fake source tests §5.3 better than the real one, because it produces an empty response,
 a 40% count drop, and byte-identical repeat data on demand.
@@ -573,8 +561,9 @@ counter drift.
 **M5 — AWS.** RDS, the EC2 instance, Caddy with Let's Encrypt, deployment, and a restore
 test.
 
-**M6 — University integration. Blocked.** Review and document the VBA script, port it,
-map the fields, and set up IP allowlisting.
+**M6 — University integration. Built.** No VBA port: the university supplied a REST
+service (request 27). Open: whether the service answers without the HUJI VPN. Until that
+is known, the server does not sync by itself, and a saved response is loaded by hand.
 
 **Then, and only on request:** anything from §13.
 
@@ -608,14 +597,14 @@ Verify in the AWS calculator before committing.
 
 | Item | Needed |
 |---|---|
-| **University integration** | The Excel file, the VBA script, a sample response, credentials, and access instructions. Nothing in M6 can start without these |
+| **University integration** | Answered: the REST service of request 27. Open: does it answer from outside the HUJI VPN, for example from the server? |
 | **HUJI Google Workspace** | ⚠️ Does it permit third-party login applications? A Workspace administrator can block them. This is the only item that can force a redesign. Ask HUJI IT in week 1 |
 | **Student email domains** | Do all students use `mail.huji.ac.il`? The login allowlist needs the full list |
 | **Aguda Google Workspace** | Approve the login application. Aguda controls this, so it needs no outside answer |
-| **Network connection** | Choose IP allowlisting, or confirm the Rumba VPN runs unattended. Allowlisting is strongly preferred |
-| **Membership source** | How does the university response represent Aguda membership? |
+| **Network connection** | Rumba is HUJI's F5 VPN. `openconnect --protocol=f5` connects from Linux with a browser session cookie, which is not unattended. Allowlisting the server's IP is still preferred |
+| **Membership source** | Answered (request 27): everyone on the list is a member |
 | **Student count** | Confirm the roster size. This plan assumes about 23,000 |
-| **Gender codes** | What values does the university send for מגדר? `isFemale()` recognises `נקבה`, `F`, and `female`. Any other value shows the masculine, so an unrecognised code silently addresses every woman as a man |
+| **Gender codes** | Answered: the service sends `Female` or `Male`. `isFemale()` recognises `Female` |
 | **Data retention** | ⚠️ How long is national ID data kept, and who may read it? Settle this **before the first real import** |
 
 ---
@@ -625,7 +614,7 @@ Verify in the AWS calculator before committing.
 | Risk | Mitigation |
 |---|---|
 | HUJI blocks third-party Google login | Ask in week 1. The fallback is a one-time code by email, which needs AWS SES and a production-access request |
-| The VBA script needs an interactive login | Keep `StudentSource` narrow. Everything else runs on `FakeSource`. M6 is independent |
+| The university service answers only inside the VPN | Load a saved response by hand with `load-students`, until the server's IP is allowlisted |
 | A worker who leaves keeps access | A manager removes the worker on `/manager`. The next request is refused, because §6 reads the role on every request |
 | A counter drifts from the student rows | Two reconciliation queries in §4.2, run in the test suite and shown on a staff screen |
 | Two students claim the last unit of a gift | §5.1 statement 2 is a compare-and-swap on the one `gifts` row. Exactly one succeeds. Threaded tests in M2 prove it |
@@ -649,7 +638,6 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 |---|---|---|
 | §5.1 Campaigns | One gift round only. No campaign records, no dates, no per-campaign configuration | A `campaigns` table, and a campaign column on the student gift fields |
 | History of profile or academic changes | Only membership changes and interactions are kept. A changed faculty overwrites the old value | A third array, or extra entry kinds |
-| A student who left the university is indistinguishable from one who stays | No enrollment column. A graduate with stale membership can still collect | A `present` boolean, set false for students absent from a validated complete response, plus a date if the specification's §10 absence history is wanted |
 | Which employee handed a gift over | Not recorded. `gift_taken_at` holds only the time | A `given_by_email` column, written by the §5.2 statement |
 | §5.2 Stock per collection location | One counter per gift, across all centers | A `gift_inventory` table keyed by gift and location |
 | §7.2 Questionnaire, editable on a screen | Built as request 22, but the questions live in `src/survey.ts`, so a change needs a developer and a deploy | A questions table and an editing screen. The stored answers carry a `version`, so old answers stay readable |
@@ -669,6 +657,8 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | Case | What happens now | What it would need |
 |---|---|---|
 | A student from an international program has no תעודת זהות | Whatever the university sends is stored. The column is text with no validator | Nothing, unless the value is absent |
+| A student has no HUJI email, or an email outside `mail.huji.ac.il` (40 students in the 2026 list) | Stored as given. The student cannot log in with Google. `load-students` lists them | The owner decides later |
+| Two records of one national ID with different personal details | The whole response is refused. None in the 2026 list | A rule for which record wins |
 | A student studies two programs at once | The second overwrites the first | A `student_programs` table |
 | A report must query the arrays across students | `membership_history` and `interactions` need `jsonb_array_elements`, and no index helps | Move the array into its own table with typed columns |
 | A student wants a different gift after choosing | Nothing can change it. The student keeps it | §15.1. The owner deferred this flow |
@@ -715,6 +705,7 @@ document is a wish list, and a section in it is not a request.
 | 24 | Two login pages: students (the default) and staff. Staff are managers or workers, with a `mail.huji.ac.il` or an `aguda.org.il` account. Managers add and remove workers, and edit the gift stock. All students have `mail.huji.ac.il` accounts |
 | 25 | One `staff` table lists every employee, and marks each one as a manager or a worker |
 | 26 | After the survey and the selection, the student can mark the gift as received. This does exactly what the desk's "mark as taken" does |
+| 27 | The real student list comes from the university's `AgudaStudents` service. Everyone on it is a member; a student absent from a later list is no longer a member. Duplicate records with the same details merge. The desk search ignores leading zeros. A student can have several campuses, and `אדמונד י' ספרא` shows as `גבעת רם`. `specialPopulationsList` is stored, for special services. Students who cannot log in are listed, with no special handling |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

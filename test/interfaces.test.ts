@@ -210,6 +210,14 @@ describe("staff page", () => {
     assert.equal(res.headers["cache-control"], "no-store");
   });
 
+  test("search ignores leading zeros, as the university drops them (request 27)", async () => {
+    await pool.query("UPDATE students SET national_id = '12345678' WHERE national_id = $1", [ids[0]]);
+    for (const typed of ["012345678", "12345678", " 0012345678 "]) {
+      const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies: await asStaff(), ...form({ national_id: typed }) });
+      assert.match(res.body, /<bdi dir="ltr">12345678<\/bdi>/, typed);
+    }
+  });
+
   test("an unknown ID says so", async () => {
     const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies: await asStaff(), ...form({ national_id: "999" }) });
     assert.match(res.body, /לא מצאנו סטודנט/);

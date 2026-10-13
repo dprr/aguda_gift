@@ -20,8 +20,10 @@ export type SyncResult =
  * - Validates the whole response before writing anything.
  * - Applies everything in one transaction, so any failure writes nothing.
  * - Writes a column only when its value differs, so a repeated import writes nothing.
- * - Appends to `membership_history` only when `member` changes (request 13).
- * - Never deletes a student, and leaves students absent from the response untouched.
+ * - Request 27: everyone on the list is a member. A student absent from the list stops
+ *   being a member, and is never deleted. Rejoining the list makes the student a member
+ *   again. `membership_history` gains an entry only when `member` changes (request 13).
+ * - The minimum size guard stops a cut-off response from ending everyone's membership.
  */
 export async function syncStudents(
   source: StudentSource,
@@ -60,21 +62,21 @@ export async function syncStudents(
       });
     }
 
-    const cols = PROFILE_COLUMNS.join(", ");
-    const colTypes = PROFILE_COLUMNS.map((c) => `${c} text`).join(", ");
+    const names = PROFILE_COLUMNS.map(([c]) => c);
+    const cols = names.join(", ");
+    const colTypes = PROFILE_COLUMNS.map(([c, type]) => `${c} ${type}`).join(", ");
 
     await db.query(
       `CREATE TEMP TABLE incoming ON COMMIT DROP AS
-       SELECT * FROM jsonb_to_recordset($1::jsonb)
-         AS x(national_id text, ${colTypes}, member boolean)`,
+       SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(national_id text, ${colTypes})`,
       [JSON.stringify(rows)],
     );
 
-    // New students. First sight records the membership the source reports.
+    // New students. On the list, so a member from the first sight.
     const added = await db.query(
       `INSERT INTO students (national_id, ${cols}, member, member_changed_at, membership_history)
-       SELECT national_id, ${cols}, member, now(),
-              jsonb_build_array(jsonb_build_object('at', now(), 'member', member))
+       SELECT national_id, ${cols}, true, now(),
+              jsonb_build_array(jsonb_build_object('at', now(), 'member', true))
          FROM incoming
        ON CONFLICT (national_id) DO NOTHING`,
     );
@@ -82,25 +84,28 @@ export async function syncStudents(
     // Existing students: profile and academic columns, only where something differs.
     const profileChanged = await db.query(
       `UPDATE students s
-          SET (${cols}) = (${PROFILE_COLUMNS.map((c) => `i.${c}`).join(", ")})
+          SET (${cols}) = (${names.map((c) => `i.${c}`).join(", ")})
          FROM incoming i
         WHERE s.national_id = i.national_id
-          AND (${PROFILE_COLUMNS.map((c) => `s.${c}`).join(", ")})
+          AND (${names.map((c) => `s.${c}`).join(", ")})
               IS DISTINCT FROM
-              (${PROFILE_COLUMNS.map((c) => `i.${c}`).join(", ")})`,
+              (${names.map((c) => `i.${c}`).join(", ")})`,
     );
 
-    // Step 6: membership, only where it changed. The history entry is written in the
-    // same statement, so the column and the list cannot disagree.
+    // Step 6: membership, only where it changed. On the list: a member. Absent: not a
+    // member. The history entry is written in the same statement, so the column and the
+    // list cannot disagree.
     const membershipChanged = await db.query(
       `UPDATE students s
-          SET member = i.member,
+          SET member = m.on_list,
               member_changed_at = now(),
               membership_history = s.membership_history
-                || jsonb_build_array(jsonb_build_object('at', now(), 'member', i.member))
-         FROM incoming i
-        WHERE s.national_id = i.national_id
-          AND s.member IS DISTINCT FROM i.member`,
+                || jsonb_build_array(jsonb_build_object('at', now(), 'member', m.on_list))
+         FROM (SELECT s2.national_id,
+                      EXISTS (SELECT 1 FROM incoming i WHERE i.national_id = s2.national_id) AS on_list
+                 FROM students s2) m
+        WHERE s.national_id = m.national_id
+          AND s.member IS DISTINCT FROM m.on_list`,
     );
 
     return {

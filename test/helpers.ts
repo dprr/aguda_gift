@@ -25,9 +25,13 @@ export async function freshDatabase(stock = 10): Promise<void> {
  * they have already submitted the survey (request 22), so gift tests start at the gifts.
  */
 export async function loadStudents(count: number, members = count, surveyDone = true): Promise<string[]> {
-  const students = fakeStudents(count).map((s, i) => ({ ...s, member: i < members }));
+  // Request 27: everyone on the list is a member, so the rest are set apart afterwards.
+  const students = fakeStudents(count);
   const result = await syncStudents(new FakeSource(students), { minStudents: 0 });
   if (!result.ok) throw new Error(`load failed: ${result.detail}`);
+  await pool.query("UPDATE students SET member = false WHERE national_id = ANY($1)", [
+    students.slice(members).map((s) => s.national_id),
+  ]);
   if (surveyDone) {
     await pool.query(
       `UPDATE students SET survey = '{"version": 0, "submitted_at": "2026-01-01T00:00:00Z", "answers": {}}'`,

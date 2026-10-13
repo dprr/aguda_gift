@@ -169,12 +169,12 @@ export const AGUDA_SOCIAL: Social = {
 };
 
 /**
- * Each campus's own links, keyed by students.campus exactly as the university list spells
- * it. ⚠️ The keys match the fake data; confirm them against the real list (M6). A campus
- * with an entry but no WhatsApp shows a note inviting the student to start a group.
+ * Each campus's own links, keyed by the university's campus name exactly as the list
+ * spells it (request 27). A campus with an entry but no WhatsApp shows a note inviting the
+ * student to start a group. A campus with no entry, such as בתי חולים, shows nothing.
  */
 export const CAMPUS_SOCIAL: Record<string, Social> = {
-  "גבעת רם": {
+  "אדמונד י' ספרא": {
     instagram: "https://www.instagram.com/aguda.givatram/",
     whatsapp: "https://agudagivatram.org/agudaupdates", // redirects to the group
   },
@@ -188,6 +188,10 @@ export const CAMPUS_SOCIAL: Record<string, Social> = {
     whatsapp: "https://wa.me/972555660388",
   },
 };
+
+/** Students know the campus by another name than the university's (owner's decision). */
+const CAMPUS_LABEL: Record<string, string> = { "אדמונד י' ספרא": "גבעת רם" };
+export const campusLabel = (name: string) => CAMPUS_LABEL[name] ?? name;
 
 /** The form field and the stored key of an option's follow-up: <id>_text or <id>_choice. */
 export const followKey = (questionId: string, follow: NonNullable<Option["follow"]>) =>
