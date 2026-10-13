@@ -6,6 +6,7 @@
 #
 #   bash $ROOT/app/deploy/server.sh deploy    # install if missing, migrate, (re)start
 #   bash $ROOT/app/deploy/server.sh start | stop | status | logs
+#   bash $ROOT/app/deploy/server.sh staff | load-students <file.json> | psql
 #
 # Nothing here survives a reboot by itself. After a reboot, run `start`.
 set -euo pipefail
@@ -143,5 +144,7 @@ case "${1:-}" in
     ;;
   logs) tail -n "${2:-50}" "$LOGS/app.log" ;;
   staff) shift; node_run src/staff.ts "$@" ;; # list, or: manager <email> | remove <email>
-  *) echo "usage: $0 deploy | start | stop | status | logs [lines] | staff [manager|remove <email>]"; exit 1 ;;
+  load-students) shift; node_run src/university.ts "$@" ;; # <saved response.json>
+  psql) shift; "$PGBIN/psql" -h "$RUN" -U aguda -d aguda "$@" ;;
+  *) echo "usage: $0 deploy | start | stop | status | logs [lines] | staff [manager|remove <email>] | load-students <file.json> | psql [args]"; exit 1 ;;
 esac
