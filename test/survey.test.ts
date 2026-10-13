@@ -255,12 +255,34 @@ describe("the five questions of version 3", () => {
     assert.ok(no.ok && !("dorms_choice" in no.answers));
   });
 
-  test("special population needs its explanation after כן", async () => {
+  test("special population: כן needs at least one category, any number, each a real one", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
-    const missing = validate(LIVE, { ...base, dorms: "no", special: "yes" });
-    assert.deepEqual(!missing.ok && missing.errors, { special: "required" });
-    const given = validate(LIVE, { ...base, dorms: "no", special: "yes", special_text: "הסבר" });
-    assert.ok(given.ok && given.answers.special_text === "הסבר");
+    const none = validate(LIVE, { ...base, dorms: "no", special: "yes" });
+    assert.deepEqual(!none.ok && none.errors, { special: "required" });
+    const fake = validate(LIVE, { ...base, dorms: "no", special: "yes", special_choices: ["druze", "martian"] });
+    assert.deepEqual(!fake.ok && fake.errors, { special: "invalid" });
+    const one = validate(LIVE, { ...base, dorms: "no", special: "yes", special_choices: "druze" });
+    assert.ok(one.ok && JSON.stringify(one.answers.special_choices) === '["druze"]');
+    const many = validate(LIVE, { ...base, dorms: "no", special: "yes", special_choices: ["arab_israeli", "former_haredi", "other"] });
+    assert.ok(many.ok && (many.answers.special_choices as string[]).length === 3);
+    const no = validate(LIVE, { ...base, dorms: "no", special: "no", special_choices: ["druze"] });
+    assert.ok(no.ok && !("special_choices" in no.answers), "categories are dropped after לא");
+  });
+
+  test("special population renders as a dropdown, and כן reveals gendered checkboxes", async () => {
+    const live = await buildApp({
+      google: noGoogle, sessionSecret: "s".repeat(32), domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
+      devLogin: true, production: false, origin: ORIGIN,
+    });
+    await pool.query("UPDATE students SET gender = 'Female' WHERE national_id = $1", [ids[0]]);
+    const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${ids[0]}`) });
+    const html = (await live.inject({ url: "/student", cookies: { session: r.cookies.find((c) => c.name === "session")!.value } })).body;
+    assert.match(html, /<select name="special"><option value="">בחרי<\/option><option value="yes">כן<\/option><option value="no">לא<\/option><\/select>/);
+    assert.match(html, /<div class="when" data-when="yes"><div class="choices">/);
+    assert.match(html, /option\[value="yes"\]:checked\) \.when\[data-when="yes"\] \{ display: block; \}/);
+    assert.equal(html.split('type="checkbox" name="special_choices"').length - 1, 12);
+    assert.match(html, /value="arab_israeli"> ערבייה בעלת אזרחות ישראלית/);
+    assert.match(html, /value="left_religion"> יוצאת בשאלה שאינה חרדית/);
   });
 
   test("the last question is optional", async () => {

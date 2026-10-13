@@ -263,6 +263,7 @@ function layout(body: string, wide = false): string {
   .option .follow { width: 60%; margin-block: 0; font: inherit; padding: 0.3rem; }
   /* A follow-up shows only once its own option is picked. CSS only, no JavaScript. */
   .option input:not(:checked) ~ .follow { display: none; }
+  .when { display: none; margin-block-start: 0.5rem; }
   textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.5rem; }
 </style>
 </head>
@@ -420,6 +421,12 @@ export function surveyPage(
     if (o.follow.kind === "text") {
       return ` <input type="text" class="follow" name="${esc(key)}" maxlength="1000" value="${esc(values[key])}">`;
     }
+    if (o.follow.kind === "multi") {
+      const picked = new Set((Array.isArray(values[key]) ? values[key] : [values[key]]).map(String));
+      return `<div class="choices">${o.follow.options
+        .map((x) => `<label class="option"><input type="checkbox" name="${esc(key)}" value="${esc(x.value)}"${picked.has(x.value) ? " checked" : ""}> ${esc((female && x.labelFemale) || x.label)}</label>`)
+        .join("")}</div>`;
+    }
     const groups = o.follow.groups
       .map((g) => `<optgroup label="${esc(g.label)}">${g.options
         .map((x) => `<option value="${esc(x.value)}"${values[key] === x.value ? " selected" : ""}>${esc(x.label)}</option>`)
@@ -469,6 +476,12 @@ export function surveyPage(
           .map((o) => `<option value="${esc(o.value)}"${has(q, o.value) ? " selected" : ""}>${esc((female && o.labelFemale) || o.label)}</option>`)
           .join("");
         input = `<select name="${esc(q.id)}"><option value="">${female ? T.survey.pickFemale : T.survey.pick}</option>${options}</select>`;
+        // A dropdown option's follow-up sits after the box. CSS shows it only while that
+        // option is selected, with no JavaScript.
+        for (const o of q.options.filter((x) => x.follow)) {
+          input += `<div class="when" data-when="${esc(o.value)}">${followUp(q, o)}</div>
+<style>.question:has(select[name="${esc(q.id)}"] option[value="${esc(o.value)}"]:checked) .when[data-when="${esc(o.value)}"] { display: block; }</style>`;
+        }
       } else {
         const type = q.kind === "choice" ? "radio" : "checkbox";
         input = q.options

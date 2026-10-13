@@ -26,13 +26,17 @@ export type Option = {
   labelFemale?: string;
   /**
    * A follow-up that appears only when this option is picked, and is then required:
-   * a text box, or a dropdown. Stored beside the answer under followKey().
+   * a text box, a dropdown, or checkboxes (at least one). Stored beside the answer under
+   * followKey().
    */
-  follow?: { kind: "text" } | { kind: "select"; groups: { label: string; options: Option[] }[] };
+  follow?:
+    | { kind: "text" }
+    | { kind: "select"; groups: { label: string; options: Option[] }[] }
+    | { kind: "multi"; options: Option[] };
 };
 export type Question =
   | (Base & { kind: "text"; campusSocial?: boolean })
-  // exactly one. dropdown: a <select> box instead of radio buttons; its options take no follow-up.
+  // exactly one. dropdown: a <select> box instead of radio buttons.
   | (Base & { kind: "choice"; options: Option[]; campusSocial?: boolean; dropdown?: boolean })
   | (Base & { kind: "multi"; options: Option[]; campusSocial?: boolean }); // any number
 // campusSocial: show the Aguda Instagram and WhatsApp links of the student's own campus.
@@ -58,6 +62,26 @@ const DORMS = [
   { label: "רחובות", options: [{ value: "rehovot", label: "רחובות" }] },
 ];
 
+/**
+ * The special populations of the university list (specialPopulationsList), as of the 2026
+ * list. The university writes them with gendered slash forms, which this project never
+ * uses, so each has a masculine label and a feminine one.
+ */
+const SPECIAL_POPULATIONS: Option[] = [
+  { value: "arab_israeli", label: "ערבי בעל אזרחות ישראלית", labelFemale: "ערבייה בעלת אזרחות ישראלית" },
+  { value: "arab_east_jerusalem", label: "ערבי תושב מזרח ירושלים", labelFemale: "ערבייה תושבת מזרח ירושלים" },
+  { value: "arab_palestinian_authority", label: "ערבי תושב הרשות הפלסטינית", labelFemale: "ערבייה תושבת הרשות הפלסטינית" },
+  { value: "haredi_school", label: "חרדי (לפי סקטור בית ספר)", labelFemale: "חרדית (לפי סקטור בית ספר)" },
+  { value: "haredi_declared", label: "חרדי (לפי הצהרה)", labelFemale: "חרדית (לפי הצהרה)" },
+  { value: "former_haredi", label: "חרדי לשעבר", labelFemale: "חרדית לשעבר" },
+  { value: "left_religion", label: "יוצא בשאלה שאינו חרדי", labelFemale: "יוצאת בשאלה שאינה חרדית" },
+  { value: "ethiopian", label: "ישראלי יוצא אתיופיה", labelFemale: "ישראלית יוצאת אתיופיה" },
+  { value: "druze", label: "דרוזי", labelFemale: "דרוזית" },
+  { value: "bedouin", label: "בדואי", labelFemale: "בדואית" },
+  { value: "circassian", label: "צ'רקסי", labelFemale: "צ'רקסית" },
+  { value: "other", label: "אחר" },
+];
+
 const YES_NO: Option[] = [
   { value: "yes", label: "כן" },
   { value: "no", label: "לא" },
@@ -68,9 +92,11 @@ const YES_NO: Option[] = [
  * Version 2: singular, gendered wording instead of אתם, and the spelling ליהנות.
  * Version 3: five more questions.
  * Version 4: fences takes several answers; the elections question, as a dropdown.
+ * Version 5: special population is a dropdown; כן opens checkboxes of the university's
+ * categories instead of a text box.
  */
 export const SURVEY: Survey = {
-  version: 4,
+  version: 5,
   questions: [
     {
       id: "fences",
@@ -121,11 +147,12 @@ export const SURVEY: Survey = {
     {
       id: "special",
       kind: "choice",
+      dropdown: true,
       label: "האם אתה מאוכלוסייה מיוחדת?",
       labelFemale: "האם את מאוכלוסייה מיוחדת?",
       required: true,
       options: [
-        { value: "yes", label: "כן", follow: { kind: "text" } },
+        { value: "yes", label: "כן", follow: { kind: "multi", options: SPECIAL_POPULATIONS } },
         { value: "no", label: "לא" },
       ],
     },
@@ -193,9 +220,9 @@ export const CAMPUS_SOCIAL: Record<string, Social> = {
 const CAMPUS_LABEL: Record<string, string> = { "אדמונד י' ספרא": "גבעת רם" };
 export const campusLabel = (name: string) => CAMPUS_LABEL[name] ?? name;
 
-/** The form field and the stored key of an option's follow-up: <id>_text or <id>_choice. */
+/** The form field and the stored key of an option's follow-up: <id>_text, _choice, or _choices. */
 export const followKey = (questionId: string, follow: NonNullable<Option["follow"]>) =>
-  `${questionId}_${follow.kind === "text" ? "text" : "choice"}`;
+  `${questionId}_${{ text: "text", select: "choice", multi: "choices" }[follow.kind]}`;
 
 export type Answers = Record<string, string | string[]>;
 const MAX_TEXT = 1000;
@@ -233,6 +260,14 @@ export function validate(
           if (!o.follow || !values.includes(o.value)) continue;
           const key = followKey(q.id, o.follow);
           const raw = body[key];
+          if (o.follow.kind === "multi") {
+            const allowed = new Set(o.follow.options.map((x) => x.value));
+            const picked = (Array.isArray(raw) ? raw : raw === undefined || raw === "" ? [] : [raw]).map(String);
+            if (picked.some((v) => !allowed.has(v))) errors[q.id] = "invalid";
+            else if (picked.length === 0) errors[q.id] = "required";
+            else answers[key] = [...new Set(picked)];
+            continue;
+          }
           const value = typeof raw === "string" ? raw.trim() : "";
           if (!value) errors[q.id] = "required";
           else if (o.follow.kind === "text" && value.length > MAX_TEXT) errors[q.id] = "invalid";
