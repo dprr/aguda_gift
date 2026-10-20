@@ -12,6 +12,7 @@ import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { addStaff, listStaff, RANK, removeStaff, type Role, roleOf, setStock } from "./staff.ts";
 import { exportCsv, isExport } from "./export.ts";
+import { extraQuestionsEnabled, setExtraQuestions } from "./settings.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 import { UniversitySource } from "./university.ts";
@@ -41,7 +42,15 @@ const SESSION_HOURS = 12; // one desk shift
 const IMG_DIR = join(import.meta.dirname, "..", "img");
 
 export async function buildApp(options: AppOptions) {
-  const survey = options.survey ?? SURVEY;
+  const fullSurvey = options.survey ?? SURVEY;
+  /**
+   * The survey students get now. Request 33: with the extra questions switched off, they
+   * are removed here, so the page never shows them and validate() never reads them.
+   */
+  const liveSurvey = async (): Promise<Survey> =>
+    (await extraQuestionsEnabled())
+      ? fullSurvey
+      : { ...fullSurvey, questions: fullSurvey.questions.filter((q) => !q.extra) };
   if (options.production && options.devLogin && !options.demo) {
     throw new Error("DEV_LOGIN must be off in production");
   }
@@ -295,7 +304,7 @@ export async function buildApp(options: AppOptions) {
         return reply.redirect("/");
       }
       // Request 22: member or not, the survey comes first.
-      if (!s.survey_submitted) return html(reply, surveyPage(s, survey));
+      if (!s.survey_submitted) return html(reply, surveyPage(s, await liveSurvey()));
 
       const { saved, error, surveyed, received } = request.query;
       let message: Notice | undefined;
@@ -350,6 +359,7 @@ export async function buildApp(options: AppOptions) {
     { preHandler: requireStudent },
     async (request, reply) => {
       const body = request.body ?? {};
+      const survey = await liveSurvey();
       const checked = validate(survey, body);
       if (!checked.ok) {
         const s = await findStudent(studentId(request));
@@ -459,6 +469,7 @@ export async function buildApp(options: AppOptions) {
       return html(reply, managerPage({
         email: staffEmail(request),
         role: staffRole(request),
+        extraQuestions: await extraQuestionsEnabled(),
         staff: await listStaff(),
         gifts: await listGifts(),
         message,
@@ -495,6 +506,17 @@ export async function buildApp(options: AppOptions) {
           ? `/manager?error=below_requested&min=${result.min}`
           : `/manager?error=${result.reason === "invalid" ? "invalid_stock" : result.reason}`,
       );
+    },
+  );
+
+  // Request 33: a ceo switches the survey's extra questions on or off.
+  app.post<{ Body: { enabled?: string } }>(
+    "/manager/extra-questions",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const enabled = request.body?.enabled === "1";
+      await setExtraQuestions(enabled);
+      return reply.redirect(`/manager?done=${enabled ? "extra_on" : "extra_off"}`);
     },
   );
 

@@ -180,6 +180,12 @@ export const T = {
     stockHint: "המלאי ההתחלתי הוא כמות היחידות שהאגודה קנתה מכל מתנה.",
     stockCols: ["מתנה", "סטודנטים בחרו", "סטודנטים קיבלו", "מלאי התחלתי"],
     save: "שמור",
+    /** Request 33: the ceo's switch for the survey's extra questions. */
+    extraTitle: "שאלות נוספות בסקר",
+    extraIsOn: "הסטודנטים יכולים לפתוח את השאלות הנוספות (לא חובה).",
+    extraIsOff: "הסטודנטים אינם רואים את השאלות הנוספות.",
+    extraTurnOn: "הפעל את השאלות הנוספות",
+    extraTurnOff: "השבת את השאלות הנוספות",
     /** Request 29: the ceo's downloads, one CSV file per table. */
     export: "הורדת הנתונים",
     exportHint: "קובץ CSV לכל טבלה. הקבצים כוללים פרטים אישיים של סטודנטים: שמור אותם במקום מוגן, ומחק אותם כשסיימת.",
@@ -192,6 +198,8 @@ export const T = {
       promoted_ceo: "עדכנו את התפקיד למנכ\"ל.",
       removed: "הסרנו את הכתובת מרשימת הצוות.",
       stock: "שמרנו את המלאי.",
+      extra_on: "הפעלנו את השאלות הנוספות.",
+      extra_off: "השבתנו את השאלות הנוספות.",
     },
     errors: {
       invalid: "הכתובת אינה כתובת דוא\"ל תקינה.",
@@ -733,17 +741,28 @@ ${result}
 export function managerPage(options: {
   email: string;
   role: Role;
+  /** Request 33: whether students see the survey's extra questions. */
+  extraQuestions: boolean;
   staff: { email: string; role: Role }[];
   gifts: GiftView[];
   message?: Notice;
 }): string {
-  const { email, role, staff, gifts, message } = options;
+  const { email, role, extraQuestions, staff, gifts, message } = options;
   const M = T.manager;
   // Request 32: only roles below the viewer's own.
   const roleOptions = (["worker", "manager", "ceo"] as const)
     .filter((r) => mayManage(role, r))
     .map((r) => `<option value="${r}">${M.roles[r]}</option>`)
     .join("");
+  const extraSwitch = role === "ceo"
+    ? `<section><h2>${M.extraTitle}</h2>
+<p class="${extraQuestions ? "ok" : "warn"}">${extraQuestions ? M.extraIsOn : M.extraIsOff}</p>
+<form method="post" action="/manager/extra-questions">
+  <input type="hidden" name="enabled" value="${extraQuestions ? "0" : "1"}">
+  <button class="button${extraQuestions ? " secondary" : ""}">${extraQuestions ? M.extraTurnOff : M.extraTurnOn}</button>
+</form>
+</section>`
+    : "";
   const downloads = role === "ceo"
     ? `<section><h2>${M.export}</h2>
 <p class="hint">${M.exportHint}</p>
@@ -796,6 +815,7 @@ ${notice(message)}
 <p class="hint">${M.stockHint}</p>
 <table><thead><tr>${M.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
 </section>
+${extraSwitch}
 ${downloads}`,
     true,
   );

@@ -33,9 +33,9 @@ the later section is wrong.
 | Language | TypeScript, backend and frontend | One language for the whole system. The frontend is TypeScript either way |
 | Backend | Fastify | `app.inject()` tests concurrency in-process |
 | Frontend | **Server-rendered HTML. No React, no Vite, no build step** | The screens are a list of four gifts and one search box. React would add a build, a second `package.json`, a JSON API, and a second copy of the page logic (§0) |
-| Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are three small tables. An ORM would earn nothing (§0) |
+| Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are four small tables. An ORM would earn nothing (§0) |
 | Database | PostgreSQL on RDS | Same price as a container once the instance is sized honestly, and it adds point-in-time recovery |
-| **Tables** | **3: `students`, `gifts`, and `staff`** | §0. `staff` serves requests 24 and 25. Everything else serves no line in §14 |
+| **Tables** | **4: `students`, `gifts`, `staff`, and `settings`** | §0. `staff` serves requests 24 and 25; `settings` serves request 33. Everything else serves no line in §14 |
 | Login | Two pages: students at `/`, staff at `/staff/login`. Google on both | Request 24. See §2 |
 | Passwords | **None** | Google authenticates. No reset path |
 | Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Requests 25, 29, 32. Three roles, each with everything of the one below: `worker` (the desk), `manager` (also `/manager`: add and remove workers, set the stock), `ceo` (מנכ"ל, also add and remove managers, and download the data). On the website a person manages only roles strictly below their own, so only the `staff` command adds or removes a ceo |
@@ -127,7 +127,7 @@ directly.
 
 ## 4. Data model
 
-Three tables. Every timestamp is `timestamptz` in UTC. Display converts to Asia/Jerusalem.
+Four tables. Every timestamp is `timestamptz` in UTC. Display converts to Asia/Jerusalem.
 
 ### 4.1 `students`
 
@@ -342,6 +342,17 @@ bash /home/opc/aguda/app/deploy/server.sh staff manager someone@aguda.org.il   #
 ```
 
 Which manager added a worker is not recorded (§13).
+
+### 4.4 `settings`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | boolean, primary key, always `true` | Exactly one row |
+| `extra_questions` | boolean, default `true` | Request 33. Whether students see the survey's extra questions |
+
+A ceo switches `extra_questions` on the manager page. When it is off, the server removes
+the extra questions from the survey before it renders or checks it, so a student sees no
+checkbox and no section, and an extra answer sent anyway is never stored.
 
 ---
 
@@ -735,6 +746,7 @@ document is a wish list, and a section in it is not a request.
 | 30 | Every staff role can delete a student's gift selection, or the survey and the selection, so the student can start again |
 | 31 | ~~A מנכ"ל can remove managers (and other staff) from the website~~: replaced by request 32 |
 | 32 | Every role adds and removes staff strictly below its own level: a מנכ"ל manages managers and workers, a manager manages workers. This also replaces "only a מנכ"ל adds a מנכ"ל on the website": no one does |
+| 33 | A switch on the מנכ"ל's manager page turns the survey's extra questions on or off. Off: students cannot see them |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
