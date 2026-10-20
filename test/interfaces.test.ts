@@ -366,26 +366,17 @@ describe("manager page", () => {
     assert.equal((await pool.query("SELECT to_regclass('workers') AS t")).rows[0].t, null);
   });
 
-  test("a manager adds a manager, who can then open the manager page (request 28)", async () => {
-    const cookies = await asManager();
-    const res = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email: "Second@aguda.org.il", role: "manager" }) });
-    assert.equal(res.headers.location, "/manager?done=added_manager");
-    assert.equal(await notice(res.headers.location as string, cookies), "הוספנו את המנהל.");
-    const second = await login({ kind: "staff", email: "second@aguda.org.il" });
-    assert.equal((await app.inject({ url: "/manager", cookies: second })).statusCode, 200);
-  });
-
-  test("adding a worker as a manager promotes the worker; a manager is never demoted", async () => {
+  test("a manager adds and removes only workers: never a manager (request 32)", async () => {
     const cookies = await asManager();
     const add = (email: string, role: string) =>
       app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role }) });
-    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?done=promoted_manager");
-    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?error=exists");
-    assert.equal((await add("dana@aguda.org.il", "worker")).headers.location, "/manager?error=higher");
+    assert.equal((await add("second@aguda.org.il", "manager")).headers.location, "/manager?error=forbidden_role");
+    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?error=forbidden_role", "no promotion to own level");
+    assert.equal((await add("dana@aguda.org.il", "worker")).headers.location, "/manager?error=exists");
     assert.equal((await add("x@aguda.org.il", "admin")).headers.location, "/manager?error=invalid_role");
-    assert.equal((await add("x@gmail.com", "manager")).headers.location, "/manager?error=wrong_domain");
+    assert.equal((await add("x@gmail.com", "worker")).headers.location, "/manager?error=wrong_domain");
     const roles = (await pool.query("SELECT email, role FROM staff ORDER BY email")).rows;
-    assert.deepEqual(roles, [{ email: "boss@aguda.org.il", role: "manager" }, { email: "dana@aguda.org.il", role: "manager" }]);
+    assert.deepEqual(roles, [{ email: "boss@aguda.org.il", role: "manager" }, { email: "dana@aguda.org.il", role: "worker" }]);
   });
 
   test("a manager cannot give the ceo role, and sees neither it nor the downloads (request 29)", async () => {
@@ -401,20 +392,24 @@ describe("manager page", () => {
     }
   });
 
-  test("a ceo has everything a manager has, gives the ceo role, and sees the downloads", async () => {
+  test("a ceo adds managers and promotes workers, but never gives the ceo role", async () => {
     await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
     const cookies = await login({ kind: "staff", email: "chief@aguda.org.il" });
     assert.match((await app.inject({ url: "/staff", cookies })).body, /href="\/manager"/);
     const page = (await app.inject({ url: "/manager", cookies })).body;
-    assert.match(page, /<option value="ceo">מנכ&quot;ל<\/option>|<option value="ceo">מנכ"ל<\/option>/);
+    assert.match(page, /<select name="role"><option value="worker">עובד<\/option><option value="manager">מנהל<\/option><\/select>/);
     for (const t of ["students", "gifts", "staff"]) assert.match(page, new RegExp(`href="/manager/export/${t}.csv" download`));
 
-    const add = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email: "boss@aguda.org.il", role: "ceo" }) });
-    assert.equal(add.headers.location, "/manager?done=promoted_ceo");
+    const add = (email: string, role: string) =>
+      app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role }) });
+    assert.equal((await add("new@aguda.org.il", "manager")).headers.location, "/manager?done=added_manager");
+    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?done=promoted_manager");
+    assert.equal((await add("dana@aguda.org.il", "worker")).headers.location, "/manager?error=higher", "never a demotion");
+    assert.equal((await add("boss@aguda.org.il", "ceo")).headers.location, "/manager?error=forbidden_role");
     const stock = await app.inject({ method: "POST", url: "/manager/stock", cookies, ...form({ gift_id: "1", starting_inventory: "9" }) });
     assert.equal(stock.headers.location, "/manager?done=stock");
-    // The manager list shows the highest role first.
-    assert.match((await app.inject({ url: "/manager", cookies })).body, /boss@aguda\.org\.il.*chief@aguda\.org\.il.*dana@aguda\.org\.il/s);
+    // The list shows the highest role first.
+    assert.match((await app.inject({ url: "/manager", cookies })).body, /chief@aguda\.org\.il.*boss@aguda\.org\.il/s);
   });
 
   test("a ceo downloads each table as CSV that Excel reads, with no formula injection", async () => {
@@ -445,9 +440,9 @@ describe("manager page", () => {
     await assert.rejects(pool.query("INSERT INTO staff (email, role) VALUES ('x@aguda.org.il', 'admin')"), /staff_role_check/);
   });
 
-  test("the add form offers both roles, worker first", async () => {
+  test("a manager's add form offers only the worker role", async () => {
     const res = await app.inject({ url: "/manager", cookies: await asManager() });
-    assert.match(res.body, /<select name="role"><option value="worker">עובד<\/option><option value="manager">מנהל<\/option><\/select>/);
+    assert.match(res.body, /<select name="role"><option value="worker">עובד<\/option><\/select>/);
   });
 
   test("a manager cannot remove a manager or a ceo, and sees no button for them", async () => {
@@ -460,25 +455,23 @@ describe("manager page", () => {
     assert.equal((await pool.query("SELECT count(*)::int AS n FROM staff")).rows[0].n, 4);
     const page = (await app.inject({ url: "/manager", cookies })).body;
     assert.equal(page.split('action="/manager/staff/remove"').length - 1, 1, "a button only for the worker");
-    assert.match(page, /רק מנכ"ל יכול להסיר מנהל או מנכ"ל/);
+    assert.match(page, /רק אנשי צוות בתפקיד נמוך מהתפקיד שלו/);
   });
 
-  test("a ceo removes a manager and another ceo, but never themselves (request 31)", async () => {
+  test("a ceo removes managers and workers, but never a ceo (request 32)", async () => {
     await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo'), ('chief2@aguda.org.il', 'ceo')");
     const cookies = await login({ kind: "staff", email: "chief@aguda.org.il" });
     const boss = await asManager();
     const page = (await app.inject({ url: "/manager", cookies })).body;
-    // boss, chief2, dana have buttons; chief (self) has none.
-    assert.equal(page.split('action="/manager/staff/remove"').length - 1, 3);
-    assert.doesNotMatch(page, /name="email" value="chief@aguda\.org\.il"/);
+    assert.equal(page.split('action="/manager/staff/remove"').length - 1, 2, "boss and dana; no ceo");
 
     const remove = (email: string) => app.inject({ method: "POST", url: "/manager/staff/remove", cookies, ...form({ email }) });
     assert.equal((await remove("boss@aguda.org.il")).headers.location, "/manager?done=removed");
-    assert.equal((await remove("chief2@aguda.org.il")).headers.location, "/manager?done=removed");
+    assert.equal((await remove("chief2@aguda.org.il")).headers.location, "/manager?error=remove_forbidden");
     assert.equal((await remove("Chief@aguda.org.il")).headers.location, "/manager?error=remove_self");
     assert.equal((await remove("nobody@aguda.org.il")).headers.location, "/manager?error=not_found");
     const left = (await pool.query("SELECT email FROM staff ORDER BY email")).rows.map((r) => r.email);
-    assert.deepEqual(left, ["chief@aguda.org.il", "dana@aguda.org.il"]);
+    assert.deepEqual(left, ["chief2@aguda.org.il", "chief@aguda.org.il", "dana@aguda.org.il"]);
     assert.equal((await app.inject({ url: "/staff", cookies: boss })).headers.location, "/staff/login?error=not_staff", "a removed manager is locked out at once");
   });
 

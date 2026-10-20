@@ -38,7 +38,7 @@ the later section is wrong.
 | **Tables** | **3: `students`, `gifts`, and `staff`** | §0. `staff` serves requests 24 and 25. Everything else serves no line in §14 |
 | Login | Two pages: students at `/`, staff at `/staff/login`. Google on both | Request 24. See §2 |
 | Passwords | **None** | Google authenticates. No reset path |
-| Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Requests 25, 28, 29. Three roles, each with everything of the one below: `worker` (the desk), `manager` (also `/manager`: add staff, remove workers, set the stock), `ceo` (מנכ"ל, also download the data, and remove anyone but themselves, request 31). Only a ceo or the `staff` command gives the ceo role |
+| Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Requests 25, 29, 32. Three roles, each with everything of the one below: `worker` (the desk), `manager` (also `/manager`: add and remove workers, set the stock), `ceo` (מנכ"ל, also add and remove managers, and download the data). On the website a person manages only roles strictly below their own, so only the `staff` command adds or removes a ceo |
 | Identity key | National ID is the primary key | HUJI uses it as the student number. One identifier |
 | Student arrays | `membership_history` and `interactions`, both jsonb on the student row | Requests 13 and 18. No history table, and no interactions table |
 | Stock counters | `starting_inventory`, `requested_count`, `given_count` on `gifts` | Requests 16 and 19. §5.1 refuses a selection when a gift is sold out. The handout needs no stock check |
@@ -314,13 +314,17 @@ screen. A counter that drifts is then visible instead of silent.
 | `role` | text, `worker`, `manager`, or `ceo` | A CHECK constraint allows only these three (request 29) |
 
 Every employee, in one list (request 25). The manager page shows the whole list with
-each role, the highest first. It adds staff (requests 28 and 29): adding a person who
-already has a lower role raises the role, in one statement. Nothing on the page lowers a
-role. A manager removes **workers only**; a ceo removes anyone but themselves (request
-31), so at least one ceo always remains.
+each role, the highest first.
 
-⚠️ **Only a ceo gives the ceo role,** because a ceo downloads every student's details. A
-manager does not even see the option, and the server refuses it.
+**Request 32: a person adds and removes staff strictly below their own level.** A manager
+manages workers; a ceo manages managers and workers. So nobody changes a peer or
+themselves on the website, and the page never offers a role at or above the viewer's own.
+Adding a person who already has a lower role raises the role, in one statement; nothing
+on the page lowers a role. The rule sits in the SQL `WHERE` clause too, so a forced
+request changes nothing.
+
+⚠️ **Only the `staff` command adds or removes a ceo,** because a ceo downloads every
+student's details.
 
 **The ceo's downloads** (request 29): one CSV file per table (`students`, `gifts`,
 `staff`) at `/manager/export/<table>.csv`. CSV opens in Excel and Google Sheets and needs
@@ -726,10 +730,11 @@ document is a wish list, and a section in it is not a request.
 | 25 | One `staff` table lists every employee, and marks each one as a manager or a worker |
 | 26 | After the survey and the selection, the student can mark the gift as received. This does exactly what the desk's "mark as taken" does |
 | 27 | The real student list comes from the university's `AgudaStudents` service. Everyone on it is a member; a student absent from a later list is no longer a member. Duplicate records with the same details merge. The desk search ignores leading zeros. A student can have several campuses, and `אדמונד י' ספרא` shows as `גבעת רם`. `specialPopulationsList` is stored, for special services. Students who cannot log in are listed, with no special handling |
-| 28 | A manager can add another manager from the website |
+| 28 | ~~A manager can add another manager from the website~~: replaced by request 32 |
 | 29 | A third staff role, מנכ"ל: everything a manager has, plus a download of the data |
 | 30 | Every staff role can delete a student's gift selection, or the survey and the selection, so the student can start again |
-| 31 | A מנכ"ל can remove managers (and other staff) from the website |
+| 31 | ~~A מנכ"ל can remove managers (and other staff) from the website~~: replaced by request 32 |
+| 32 | Every role adds and removes staff strictly below its own level: a מנכ"ל manages managers and workers, a manager manages workers. This also replaces "only a מנכ"ל adds a מנכ"ל on the website": no one does |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

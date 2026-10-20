@@ -1,14 +1,14 @@
 /**
- * Requests 24, 25, 28, and 29. Every employee is a row in `staff`, with one of three roles,
- * each with everything of the role below it:
+ * Requests 24, 25, 28, 29, 31, and 32. Every employee is a row in `staff`, with one of three
+ * roles, each with everything of the role below it:
  *
  *   worker   the distribution desk
- *   manager  also the manager page: add staff, remove workers, set the stock
- *   ceo      (מנכ"ל) also download the data, and remove anyone but themselves. Only a ceo
- *            or the command line adds a ceo, because a ceo can read every student's details
+ *   manager  also the manager page: add and remove workers, set the stock
+ *   ceo      (מנכ"ל) also add and remove managers, and download the data
  *
- * The command line, at the end of this file, adds the first manager or ceo, and removes
- * managers and ceos.
+ * Request 32: a person adds and removes staff strictly below their own level. So nobody
+ * changes a peer or themselves on the website, and only the command line, at the end of
+ * this file, adds or removes a ceo.
  */
 import { pool } from "./db.ts";
 
@@ -46,15 +46,17 @@ export type AddStaffResult =
   | { ok: true; done: `added_${Role}` | "promoted_manager" | "promoted_ceo" }
   | { ok: false; reason: "invalid" | "wrong_domain" | "exists" | "higher" | "invalid_role" | "forbidden_role" };
 
+/** Request 32: a person acts only on roles strictly below their own. */
+export const mayManage = (by: Role, target: Role) => RANK[target] < RANK[by];
+
 /**
- * A manager or a ceo adds staff (requests 28 and 29). Adding a person who already has a
- * lower role raises the role, in one statement. Nothing here lowers a role. Only a ceo may
- * give the ceo role. Staff log in with a university or an Aguda account, so the address
- * needs one of those.
+ * A manager or a ceo adds staff below their own level (request 32). Adding a person who
+ * already has a lower role raises the role, in one statement. Nothing here lowers a role.
+ * Staff log in with a university or an Aguda account, so the address needs one of those.
  */
 export async function addStaff(email: string, role: string, staffDomains: string[], by: Role): Promise<AddStaffResult> {
   if (!isRole(role)) return { ok: false, reason: "invalid_role" };
-  if (role === "ceo" && by !== "ceo") return { ok: false, reason: "forbidden_role" };
+  if (!mayManage(by, role)) return { ok: false, reason: "forbidden_role" };
   const checked = checkEmail(email, staffDomains);
   if (!checked.ok) return checked;
 
@@ -72,20 +74,17 @@ export async function addStaff(email: string, role: string, staffDomains: string
 
 export type RemoveStaffResult = { ok: true } | { ok: false; reason: "not_found" | "forbidden" | "self" };
 
-/** Whether `by` may remove a person with role `target`: a manager, workers only; a ceo, anyone. */
-export const mayRemove = (by: Role, target: Role) => by === "ceo" || target === "worker";
-
 /**
- * Request 31. A manager removes workers. A ceo removes anyone except themselves. Only a ceo
- * removes a ceo, and never the one removing, so at least one ceo always remains. The rule
- * sits in the WHERE clause, so a role that changes at the same moment cannot slip past it.
+ * Request 32. A manager or a ceo removes staff strictly below their own level, so never a
+ * peer and never themselves. The rule sits in the WHERE clause, so a role that changes at
+ * the same moment cannot slip past it.
  */
 export async function removeStaff(email: string, by: { email: string; role: Role }): Promise<RemoveStaffResult> {
   const e = email.trim().toLowerCase();
   if (e === by.email.toLowerCase()) return { ok: false, reason: "self" };
   const r = await pool.query(
-    "DELETE FROM staff WHERE email = $1 AND ($2 = 'ceo' OR role = 'worker')",
-    [e, by.role],
+    "DELETE FROM staff WHERE email = $1 AND (CASE role WHEN 'worker' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END) < $2",
+    [e, RANK[by.role]],
   );
   if (r.rowCount) return { ok: true };
   return { ok: false, reason: (await roleOf(e)) ? "forbidden" : "not_found" };

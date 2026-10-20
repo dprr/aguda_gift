@@ -440,9 +440,10 @@ export async function buildApp(options: AppOptions) {
     },
   );
 
-  // ---- manager (request 24) ------------------------------------------------------------
-  // Managers add and remove workers, and set each gift's starting inventory. The result
-  // comes back as a short code in the redirect, so a reload never repeats the action.
+  // ---- manager page (requests 24 and 32) ----------------------------------------------
+  // Managers and ceos add and remove staff below their own level, and set each gift's
+  // starting inventory. The result comes back as a short code in the redirect, so a reload
+  // never repeats the action.
 
   app.get<{ Querystring: { done?: string; error?: string; min?: string } }>(
     "/manager",

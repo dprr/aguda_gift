@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
-import { mayRemove, type Role } from "./staff.ts";
+import { mayManage, type Role } from "./staff.ts";
 import { AGUDA_SOCIAL, CAMPUS_SOCIAL, campusLabel, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
 export const T = {
@@ -171,7 +171,7 @@ export const T = {
     staff: "צוות",
     staffCols: ["דוא\"ל", "תפקיד", ""],
     roles: { worker: "עובד", manager: "מנהל", ceo: "מנכ\"ל" },
-    managersHint: "רק מנכ\"ל יכול להסיר מנהל או מנכ\"ל.",
+    managersHint: "כל איש צוות מוסיף ומסיר רק אנשי צוות בתפקיד נמוך מהתפקיד שלו. כדי להוסיף מנכ\"ל או להסיר מנכ\"ל, פנה למפתח.",
     newStaff: "כתובת דוא\"ל, בחשבון של האוניברסיטה או של האגודה",
     role: "תפקיד",
     add: "הוסף",
@@ -199,10 +199,10 @@ export const T = {
       higher: "לכתובת הזו כבר יש תפקיד גבוה יותר.",
       exists: "הכתובת הזו כבר ברשימה, באותו תפקיד.",
       not_found: "הכתובת אינה ברשימת הצוות.",
-      remove_forbidden: "רק מנכ\"ל יכול להסיר מנהל או מנכ\"ל.",
+      remove_forbidden: "אתה יכול להסיר רק איש צוות בתפקיד נמוך מהתפקיד שלך.",
       remove_self: "אינך יכול להסיר את עצמך.",
       invalid_role: "התפקיד אינו תקין.",
-      forbidden_role: "רק מנכ\"ל יכול להוסיף מנכ\"ל.",
+      forbidden_role: "אתה יכול לתת רק תפקיד נמוך מהתפקיד שלך.",
       invalid_stock: "הזן מספר שלם, 0 או יותר.",
       unknown_gift: "לא מצאנו את המתנה.",
       below_requested: "סטודנטים כבר בחרו במתנה הזו יותר פעמים מהמספר שהזנת. הזן לפחות",
@@ -739,8 +739,9 @@ export function managerPage(options: {
 }): string {
   const { email, role, staff, gifts, message } = options;
   const M = T.manager;
-  // Only a ceo may give the ceo role (request 29), so only a ceo sees it in the list.
-  const roleOptions = (role === "ceo" ? (["worker", "manager", "ceo"] as const) : (["worker", "manager"] as const))
+  // Request 32: only roles below the viewer's own.
+  const roleOptions = (["worker", "manager", "ceo"] as const)
+    .filter((r) => mayManage(role, r))
     .map((r) => `<option value="${r}">${M.roles[r]}</option>`)
     .join("");
   const downloads = role === "ceo"
@@ -753,11 +754,11 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
     : "";
 
   // Request 25: one list of all the staff, with each person's role. A remove button only
-  // where this viewer may remove (request 31): a manager, workers; a ceo, anyone but self.
+  // where this viewer may remove (request 32): strictly below their own level.
   const staffRows = staff
     .map(
       (m) => `<tr><td>${ltr(m.email)}</td><td>${M.roles[m.role]}</td><td>${
-        mayRemove(role, m.role) && m.email !== email
+        mayManage(role, m.role) && m.email !== email
           ? `<form method="post" action="/manager/staff/remove">
   <input type="hidden" name="email" value="${esc(m.email)}">
   <button class="button secondary small">${M.remove}</button>
@@ -784,7 +785,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
 ${notice(message)}
 <section><h2>${M.staff}</h2>
 <table><thead><tr>${M.staffCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${staffRows}</tbody></table>
-${role === "ceo" ? "" : `<p class="hint">${M.managersHint}</p>`}
+<p class="hint">${M.managersHint}</p>
 <form method="post" action="/manager/staff/add">
   <label>${M.newStaff}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
   <label>${M.role} <select name="role">${roleOptions}</select></label>
