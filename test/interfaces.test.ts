@@ -6,6 +6,7 @@ import { pool } from "../src/db.ts";
 import { markTaken, selectGift } from "../src/gifts.ts";
 import { migrate } from "../src/migrate.ts";
 import { GIFTS } from "../src/seed.ts";
+import type { Mail } from "../src/mail.ts";
 import { buildApp } from "../src/server.ts";
 import { freshDatabase, gift, loadStudents, setMember, student } from "./helpers.ts";
 
@@ -18,6 +19,8 @@ const noGoogle: GoogleLogin = {
 };
 type App = Awaited<ReturnType<typeof buildApp>>;
 let app: App;
+/** Request 34: the alerts the app "sent", recorded instead of mailed. */
+let sent: Mail[] = [];
 
 const form = (body: Record<string, string>) => ({
   payload: new URLSearchParams(body).toString(),
@@ -48,7 +51,10 @@ beforeEach(async () => {
     devLogin: true,
     production: false,
     origin: ORIGIN,
+    mailer: async (mail) => { sent.push(mail); },
+    alertEmail: "alerts@example.org",
   });
+  sent = [];
 });
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
@@ -316,6 +322,57 @@ describe("staff page", () => {
     const res = await app.inject({ method: "POST", url: "/staff/reset", cookies: await asStudent(ids[0]), ...form({ national_id: ids[0], what: "gift", confirm: "1" }) });
     assert.equal(res.statusCode, 403);
     assert.equal((await student(ids[0])).gift_id, 1);
+  });
+
+  test("five wrong IDs in a row remove the staff member and mail an alert (request 34)", async () => {
+    const cookies = await asStaff();
+    const search = (national_id: string) => app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id }) });
+    for (let i = 1; i <= 4; i++) {
+      const res = await search(`99999999${i}`);
+      assert.match(res.body, new RegExp(`ניסיונות שנותרו: <bdi dir="ltr">${5 - i}</bdi>`), `try ${i}`);
+    }
+    assert.equal(sent.length, 0);
+
+    const fifth = await search("999999995");
+    assert.equal(fifth.headers.location, "/staff/login?error=removed_lookups");
+    assert.equal(fifth.cookies.find((c) => c.name === "session")?.value, "", "the session is cleared");
+    assert.equal((await pool.query("SELECT 1 FROM staff WHERE email = 'dana@aguda.org.il'")).rowCount, 0);
+    assert.equal((await app.inject({ url: "/staff", cookies })).headers.location, "/staff/login?error=not_staff");
+    assert.match((await app.inject("/staff/login?error=removed_lookups")).body, /הסרנו אותך מרשימת הצוות/);
+
+    await new Promise((r) => setImmediate(r)); // the alert is sent without blocking the reply
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].to, "alerts@example.org");
+    assert.match(sent[0].subject, /dana@aguda\.org\.il/);
+    assert.match(sent[0].text, /\(עובד\)/);
+    assert.doesNotMatch(sent[0].text, /99999999/, "the wrong IDs are not mailed");
+  });
+
+  test("a found student resets the count; an empty search does not count", async () => {
+    const cookies = await asStaff();
+    const search = (national_id: string) => app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id }) });
+    for (let i = 0; i < 4; i++) await search("999");
+    await search(ids[0]);
+    for (let i = 0; i < 4; i++) await search("999");
+    for (let i = 0; i < 3; i++) await search("  ");
+    assert.equal((await pool.query("SELECT failed_lookups FROM staff WHERE email = 'dana@aguda.org.il'")).rows[0].failed_lookups, 4);
+    assert.equal(sent.length, 0);
+  });
+
+  test("two wrong searches at the same moment remove the person once, with one alert", async () => {
+    await pool.query("UPDATE staff SET failed_lookups = 4 WHERE email = 'dana@aguda.org.il'");
+    const { recordLookup } = await import("../src/staff.ts");
+    const results = await Promise.all([recordLookup("dana@aguda.org.il", false), recordLookup("dana@aguda.org.il", false)]);
+    assert.equal(results.filter((r) => r.removed).length, 1);
+  });
+
+  test("the rule removes any role, a ceo too", async () => {
+    await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
+    const cookies = await login({ kind: "staff", email: "chief@aguda.org.il" });
+    for (let i = 0; i < 5; i++) await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: "999" }) });
+    assert.equal((await pool.query("SELECT 1 FROM staff WHERE email = 'chief@aguda.org.il'")).rowCount, 0);
+    await new Promise((r) => setImmediate(r));
+    assert.match(sent[0].text, /\(מנכ"ל\)/);
   });
 
   test("a national ID never appears in a staff URL", async () => {

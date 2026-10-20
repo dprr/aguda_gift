@@ -10,7 +10,7 @@
  * changes a peer or themselves on the website, and only the command line, at the end of
  * this file, adds or removes a ceo.
  */
-import { pool } from "./db.ts";
+import { pool, Rollback, transaction } from "./db.ts";
 
 export type Role = "worker" | "manager" | "ceo";
 export const RANK: Record<Role, number> = { worker: 0, manager: 1, ceo: 2 };
@@ -88,6 +88,38 @@ export async function removeStaff(email: string, by: { email: string; role: Role
   );
   if (r.rowCount) return { ok: true };
   return { ok: false, reason: (await roleOf(e)) ? "forbidden" : "not_found" };
+}
+
+/** Request 34: this many wrong national IDs in a row remove a staff member. */
+export const MAX_FAILED_LOOKUPS = 5;
+
+export type LookupRecord =
+  | { removed: false; failed: number }
+  | { removed: true; role: Role };
+
+/**
+ * Request 34. Records one desk search by a staff member. A search that finds a student
+ * resets the count. A search that finds nobody adds one, and the fifth in a row removes the
+ * person from the staff list, whatever the role. One transaction, so two searches at the
+ * same moment cannot both read the old count.
+ */
+export async function recordLookup(email: string, found: boolean): Promise<LookupRecord> {
+  const e = email.toLowerCase();
+  if (found) {
+    await pool.query("UPDATE staff SET failed_lookups = 0 WHERE email = $1 AND failed_lookups <> 0", [e]);
+    return { removed: false, failed: 0 };
+  }
+  return transaction(async (db) => {
+    const r = await db.query(
+      "UPDATE staff SET failed_lookups = failed_lookups + 1 WHERE email = $1 RETURNING failed_lookups, role",
+      [e],
+    );
+    if (!r.rowCount) throw new Rollback<LookupRecord>({ removed: false, failed: 0 });
+    const { failed_lookups: failed, role } = r.rows[0];
+    if (failed < MAX_FAILED_LOOKUPS) return { removed: false, failed };
+    await db.query("DELETE FROM staff WHERE email = $1", [e]);
+    return { removed: true, role };
+  });
 }
 
 export type SetStockResult =

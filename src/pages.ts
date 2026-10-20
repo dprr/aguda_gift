@@ -35,6 +35,7 @@ export const T = {
   /** Refusals on the staff login page. */
   staffRefused: {
     not_staff: "החשבון הזה אינו ברשימת הצוות. פנה למנהל באגודה.",
+    removed_lookups: "הסרנו אותך מרשימת הצוות, אחרי 5 חיפושים ברצף של מספר זהות שאינו קיים. פנה למנהל באגודה.",
     no_domain: "התחבר עם חשבון האוניברסיטה או עם חשבון האגודה, לא עם חשבון Gmail פרטי.",
     wrong_domain: "החשבון הזה אינו חשבון של האוניברסיטה או של האגודה.",
     unverified_email: "Google לא אישר את כתובת הדוא\"ל של החשבון.",
@@ -124,6 +125,8 @@ export const T = {
     nationalId: "מספר זהות",
     find: "חפש",
     notFound: "לא מצאנו סטודנט עם מספר הזהות הזה.",
+    /** Request 34: the warning after a wrong ID; the number of tries left follows. */
+    triesLeft: "אחרי 5 חיפושים ברצף של מספר זהות שאינו קיים, נסיר אותך מרשימת הצוות. ניסיונות שנותרו:",
     membership: "חברות באגודה",
     updated: "נכון ל־",
     gift: "מתנה שנבחרה",

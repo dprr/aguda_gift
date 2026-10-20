@@ -312,6 +312,7 @@ screen. A counter that drifts is then visible instead of silent.
 |---|---|---|
 | `email` | text, primary key, lowercase | Requests 24 and 25. The Google account the person logs in with |
 | `role` | text, `worker`, `manager`, or `ceo` | A CHECK constraint allows only these three (request 29) |
+| `failed_lookups` | integer, default 0 | Request 34. Wrong national IDs this person searched in a row at the desk |
 
 Every employee, in one list (request 25). The manager page shows the whole list with
 each role, the highest first.
@@ -340,6 +341,15 @@ npm run staff -- manager someone@aguda.org.il             # on the laptop
 npm run staff -- ceo someone@aguda.org.il
 bash /home/opc/aguda/app/deploy/server.sh staff manager someone@aguda.org.il   # on the server
 ```
+
+**Request 34: 5 wrong IDs in a row remove the person.** Each desk search that finds no
+student adds one to `failed_lookups`; a search that finds a student resets it; an empty
+search does not count. The fifth in a row deletes the row, whatever the role, a ceo too,
+in one transaction, so 2 searches at the same moment cannot both read the old count. The
+session ends at once. After each wrong ID the desk shows how many tries remain. An alert
+goes to `ALERT_EMAIL` (default owner@example.org) through `SMTP_URL`; without
+`SMTP_URL` it goes to the app log. The alert names the person and the role, never the
+IDs that were typed.
 
 Which manager added a worker is not recorded (§13).
 
@@ -747,6 +757,7 @@ document is a wish list, and a section in it is not a request.
 | 31 | ~~A מנכ"ל can remove managers (and other staff) from the website~~: replaced by request 32 |
 | 32 | Every role adds and removes staff strictly below its own level: a מנכ"ל manages managers and workers, a manager manages workers. This also replaces "only a מנכ"ל adds a מנכ"ל on the website": no one does |
 | 33 | A switch on the מנכ"ל's manager page turns the survey's extra questions on or off. Off: students cannot see them |
+| 34 | A staff member of any role who enters a wrong national ID at the desk 5 times in a row is removed from the staff, and owner@example.org gets an email naming them |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
