@@ -12,8 +12,7 @@ import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock } from "./staff.ts";
 import { exportCsv, isExport } from "./export.ts";
-import { extraQuestionsEnabled, setExtraQuestions } from "./settings.ts";
-import { logMailer, type Mailer, smtpMailer } from "./mail.ts";
+import { clearStaffAlerts, extraQuestionsEnabled, setExtraQuestions, staffAlerts } from "./settings.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 import { UniversitySource } from "./university.ts";
@@ -33,10 +32,6 @@ export type AppOptions = {
   demo?: boolean;
   /** Request 22. Defaults to the live SURVEY; tests pass their own. */
   survey?: Survey;
-  /** Request 34: sends the alert when a staff member is removed. Defaults to the log. */
-  mailer?: Mailer;
-  /** Request 34: who gets that alert. */
-  alertEmail?: string;
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
   origin: string;
 };
@@ -47,8 +42,6 @@ const SESSION_HOURS = 12; // one desk shift
 const IMG_DIR = join(import.meta.dirname, "..", "img");
 
 export async function buildApp(options: AppOptions) {
-  const mailer = options.mailer ?? logMailer;
-  const alertEmail = options.alertEmail ?? "owner@example.org";
   const fullSurvey = options.survey ?? SURVEY;
   /**
    * The survey students get now. Request 33: with the extra questions switched off, they
@@ -399,23 +392,11 @@ export async function buildApp(options: AppOptions) {
       if (!id) return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats() }));
       const student = await findStudent(id);
 
-      // Request 34: the fifth wrong ID in a row removes this staff member, and mails an alert.
+      // Request 34: the fifth wrong ID in a row removes this staff member. recordLookup()
+      // also adds the alert that every ceo sees on the manager page (request 35).
       const record = await recordLookup(staffEmail(request), student !== null);
       if (record.removed) {
-        const who = staffEmail(request);
-        request.log.warn({ removed: who, role: record.role }, "staff removed after wrong IDs");
-        const mail = {
-          to: alertEmail,
-          subject: `הסרנו איש צוות: ${who}`,
-          text: [
-            `הסרנו את ${who} (${T.manager.roles[record.role]}) מרשימת הצוות,`,
-            `אחרי ${MAX_FAILED_LOOKUPS} חיפושים ברצף של מספר זהות שאינו קיים בעמדת החלוקה.`,
-            `זמן: ${new Intl.DateTimeFormat("he-IL", { timeZone: "Asia/Jerusalem", dateStyle: "short", timeStyle: "medium" }).format(new Date())}`,
-            "כדי להחזיר אותו, הוסף אותו שוב לרשימת הצוות.",
-          ].join("\n"),
-        };
-        // The alert must never block or break the removal.
-        mailer(mail).catch((error) => request.log.error({ err: error }, "alert email failed"));
+        request.log.warn({ removed: staffEmail(request), role: record.role }, "staff removed after wrong IDs");
         reply.clearCookie(SESSION_COOKIE, { path: "/" });
         return refuse(reply, "removed_lookups", "staff");
       }
@@ -502,6 +483,7 @@ export async function buildApp(options: AppOptions) {
         email: staffEmail(request),
         role: staffRole(request),
         extraQuestions: await extraQuestionsEnabled(),
+        alerts: staffRole(request) === "ceo" ? await staffAlerts() : [],
         staff: await listStaff(),
         gifts: await listGifts(),
         message,
@@ -538,6 +520,18 @@ export async function buildApp(options: AppOptions) {
           ? `/manager?error=below_requested&min=${result.min}`
           : `/manager?error=${result.reason === "invalid" ? "invalid_stock" : result.reason}`,
       );
+    },
+  );
+
+  // Request 35: a ceo clears the alerts they saw.
+  app.post<{ Body: { up_to?: string } }>(
+    "/manager/alerts/clear",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const upTo = request.body?.up_to ?? "";
+      if (Number.isNaN(Date.parse(upTo))) return reply.code(400).send("Bad request");
+      await clearStaffAlerts(upTo);
+      return reply.redirect("/manager");
     },
   );
 
@@ -595,11 +589,6 @@ if (import.meta.main) {
     demo: process.env.DEMO === "1",
     production: process.env.NODE_ENV === "production",
     origin: new URL(baseUrl).origin,
-    // Request 34. Without SMTP_URL, alerts go to the log.
-    mailer: process.env.SMTP_URL
-      ? smtpMailer(process.env.SMTP_URL, process.env.MAIL_FROM ?? "aguda-gifts@felber.eu.org")
-      : logMailer,
-    alertEmail: process.env.ALERT_EMAIL ?? "owner@example.org",
   });
 
   const managerCount = await pool.query("SELECT count(*)::int AS n FROM staff WHERE role = 'manager'");

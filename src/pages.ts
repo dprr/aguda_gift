@@ -183,6 +183,10 @@ export const T = {
     stockHint: "המלאי ההתחלתי הוא כמות היחידות שהאגודה קנתה מכל מתנה.",
     stockCols: ["מתנה", "סטודנטים בחרו", "סטודנטים קיבלו", "מלאי התחלתי"],
     save: "שמור",
+    /** Request 35: alerts for the ceo about staff removed after 5 wrong IDs. */
+    alertRemoved: "הסרנו מרשימת הצוות את",
+    alertReason: "אחרי 5 חיפושים ברצף של מספר זהות שאינו קיים.",
+    alertsClear: "נקה את ההתראות",
     /** Request 33: the ceo's switch for the survey's extra questions. */
     extraTitle: "שאלות נוספות בסקר",
     extraIsOn: "הסטודנטים יכולים לפתוח את השאלות הנוספות (לא חובה).",
@@ -746,17 +750,28 @@ export function managerPage(options: {
   role: Role;
   /** Request 33: whether students see the survey's extra questions. */
   extraQuestions: boolean;
+  /** Request 35: staff removed after 5 wrong IDs, shown to a ceo until cleared. */
+  alerts: { at: string; email: string; role: string }[];
   staff: { email: string; role: Role }[];
   gifts: GiftView[];
   message?: Notice;
 }): string {
-  const { email, role, extraQuestions, staff, gifts, message } = options;
+  const { email, role, extraQuestions, alerts, staff, gifts, message } = options;
   const M = T.manager;
   // Request 32: only roles below the viewer's own.
   const roleOptions = (["worker", "manager", "ceo"] as const)
     .filter((r) => mayManage(role, r))
     .map((r) => `<option value="${r}">${M.roles[r]}</option>`)
     .join("");
+  const alertBox = role === "ceo" && alerts.length
+    ? `<div class="error"><ul>${alerts
+        .map((a) => `<li>${M.alertRemoved} ${ltr(a.email)} (${esc(M.roles[a.role as Role] ?? a.role)}) ${M.alertReason} <span class="hint">${when(a.at)}</span></li>`)
+        .join("")}</ul>
+<form method="post" action="/manager/alerts/clear">
+  <input type="hidden" name="up_to" value="${esc(alerts[alerts.length - 1].at)}">
+  <button class="button secondary small">${M.alertsClear}</button>
+</form></div>`
+    : "";
   const extraSwitch = role === "ceo"
     ? `<section><h2>${M.extraTitle}</h2>
 <p class="${extraQuestions ? "ok" : "warn"}">${extraQuestions ? M.extraIsOn : M.extraIsOff}</p>
@@ -804,6 +819,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
   return layout(
     `<div class="bar"><h1>${M.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
 <p><a href="/staff">${M.back}</a></p>
+${alertBox}
 ${notice(message)}
 <section><h2>${M.staff}</h2>
 <table><thead><tr>${M.staffCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${staffRows}</tbody></table>

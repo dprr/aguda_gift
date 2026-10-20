@@ -100,8 +100,8 @@ export type LookupRecord =
 /**
  * Request 34. Records one desk search by a staff member. A search that finds a student
  * resets the count. A search that finds nobody adds one, and the fifth in a row removes the
- * person from the staff list, whatever the role. One transaction, so two searches at the
- * same moment cannot both read the old count.
+ * person from the staff list, whatever the role, and adds an alert for the ceo (request 35).
+ * One transaction, so two searches at the same moment cannot both read the old count.
  */
 export async function recordLookup(email: string, found: boolean): Promise<LookupRecord> {
   const e = email.toLowerCase();
@@ -118,6 +118,12 @@ export async function recordLookup(email: string, found: boolean): Promise<Looku
     const { failed_lookups: failed, role } = r.rows[0];
     if (failed < MAX_FAILED_LOOKUPS) return { removed: false, failed };
     await db.query("DELETE FROM staff WHERE email = $1", [e]);
+    // Request 35: the ceo's alert, in the same transaction, so no removal goes unreported.
+    await db.query(
+      `UPDATE settings SET staff_alerts = staff_alerts
+         || jsonb_build_array(jsonb_build_object('at', now(), 'email', $1::text, 'role', $2::text))`,
+      [e, role],
+    );
     return { removed: true, role };
   });
 }
