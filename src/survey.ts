@@ -18,6 +18,11 @@ type Base = {
   /** Hebrew, feminine form, if the wording changes for a woman. */
   labelFemale?: string;
   required: boolean;
+  /**
+   * An optional question, shown last, inside a section the student opens with a checkbox
+   * (owner's decision, version 6).
+   */
+  extra?: boolean;
 };
 export type Option = {
   value: string;
@@ -94,16 +99,19 @@ const YES_NO: Option[] = [
  * Version 4: fences takes several answers; the elections question, as a dropdown.
  * Version 5: special population is a dropdown; כן opens checkboxes of the university's
  * categories instead of a text box.
+ * Version 6: fences, father, welfare, and elections are optional extra questions, shown
+ * last, behind a checkbox.
  */
 export const SURVEY: Survey = {
-  version: 5,
+  version: 6,
   questions: [
     {
       id: "fences",
       kind: "multi", // at least one, because required
       label: "מה אתה חושב על הגדרות החדשות בגבעת רם?",
       labelFemale: "מה את חושבת על הגדרות החדשות בגבעת רם?",
-      required: true,
+      required: false,
+      extra: true,
       options: [
         { value: "disaster", label: "אסון לאומי" },
         { value: "technion", label: "שוקל לעבור לטכניון בגלל זה", labelFemale: "שוקלת לעבור לטכניון בגלל זה" },
@@ -114,7 +122,8 @@ export const SURVEY: Survey = {
       id: "father",
       kind: "choice",
       label: "אבא שלך ערומקו?",
-      required: true,
+      required: false,
+      extra: true,
       options: [{ value: "no", label: "לא" }],
     },
     {
@@ -122,7 +131,8 @@ export const SURVEY: Survey = {
       kind: "choice",
       label: "האם אתה צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
       labelFemale: "האם את צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
-      required: true,
+      required: false,
+      extra: true,
       options: YES_NO,
     },
     {
@@ -171,7 +181,8 @@ export const SURVEY: Survey = {
       dropdown: true,
       label: "למי תצביע בבחירות הקרובות?",
       labelFemale: "למי תצביעי בבחירות הקרובות?",
-      required: true,
+      required: false,
+      extra: true,
       options: [
         { value: "pirates", label: "הפיראטים" },
         { value: "throw_away", label: "אזרוק את הקול שלי לאנשים שלא אכפת להם ממני" },

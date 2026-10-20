@@ -185,24 +185,24 @@ describe("the live survey", () => {
     assert.deepEqual(ignored, { ok: true, answers: { fences: ["disaster"], ...base } });
   });
 
-  test("fences takes several answers, at least one, and \"אחר\" still needs its text", async () => {
+  test("fences takes several answers, is optional, and \"אחר\" still needs its text", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
     const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes", elections: "pirates" };
     const two = validate(LIVE, { ...base, fences: ["disaster", "technion"] });
     assert.ok(two.ok && JSON.stringify(two.answers.fences) === '["disaster","technion"]');
     const none = validate(LIVE, { ...base });
-    assert.deepEqual(!none.ok && none.errors, { fences: "required" });
+    assert.ok(none.ok && !("fences" in none.answers), "an extra question may stay empty");
     const otherEmpty = validate(LIVE, { ...base, fences: ["disaster", "other"], fences_text: "" });
     assert.deepEqual(!otherEmpty.ok && otherEmpty.errors, { fences: "required" });
     const otherGiven = validate(LIVE, { ...base, fences: ["disaster", "other"], fences_text: "גדר" });
     assert.ok(otherGiven.ok && otherGiven.answers.fences_text === "גדר");
   });
 
-  test("the elections question is a required dropdown with the two owner's options", async () => {
+  test("the elections question is an optional dropdown with the two owner's options", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
     const base = { fences: "disaster", father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes" };
     const empty = validate(LIVE, { ...base, elections: "" });
-    assert.deepEqual(!empty.ok && empty.errors, { elections: "required" });
+    assert.ok(empty.ok && !("elections" in empty.answers));
     const fake = validate(LIVE, { ...base, elections: "likud" });
     assert.deepEqual(!fake.ok && fake.errors, { elections: "invalid" });
     const ok = validate(LIVE, { ...base, elections: "throw_away" });
@@ -237,6 +237,49 @@ describe("the live survey", () => {
       assert.doesNotMatch(html, /אתם/);
       assert.doesNotMatch(html, /להנות/);
     }
+  });
+});
+
+describe("extra questions (version 6)", () => {
+  const EXTRA = ["fences", "father", "welfare", "elections"];
+
+  test("the four are optional and marked extra; every other question keeps its rule", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    for (const q of LIVE.questions) {
+      assert.equal(Boolean(q.extra), EXTRA.includes(q.id), q.id);
+      if (q.extra) assert.equal(q.required, false, q.id);
+    }
+    const onlyRequired = validate(LIVE, { dorms: "no", reserve: "no", special: "no", social: "no" });
+    assert.ok(onlyRequired.ok, "the survey submits with every extra question empty");
+  });
+
+  const page = async (id: string, body?: string) => {
+    const live = await buildApp({
+      google: noGoogle, sessionSecret: "s".repeat(32), domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
+      devLogin: true, production: false, origin: ORIGIN,
+    });
+    const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
+    const cookies = { session: r.cookies.find((c) => c.name === "session")!.value };
+    return body === undefined
+      ? (await live.inject({ url: "/student", cookies })).body
+      : (await live.inject({ method: "POST", url: "/student/survey", cookies, ...form(body) })).body;
+  };
+
+  test("they come last, inside the hidden section, after an unchecked, unnamed checkbox", async () => {
+    const html = await page(ids[0]);
+    const toggle = html.indexOf('class="option extra-toggle"><input type="checkbox">');
+    assert.ok(toggle > 0, "the checkbox starts unchecked and has no name");
+    assert.ok(html.indexOf('name="more"') < toggle, "after every other question");
+    const section = html.slice(html.indexOf('<div class="extra">'));
+    for (const id of EXTRA) assert.ok(section.includes(`name="${id}"`), id);
+    assert.match(html, /form:has\(\.extra-toggle input:checked\) \.extra \{ display: block; \}/);
+    assert.doesNotMatch(section.slice(0, section.indexOf("</div>\n<button")), /\(חובה\)/, "no extra question is marked required");
+  });
+
+  test("an error in an extra question opens the section, so the student sees it", async () => {
+    const html = await page(ids[0], "dorms=no&reserve=no&special=no&social=no&fences=other&fences_text=");
+    assert.match(html, /class="option extra-toggle"><input type="checkbox" checked>/);
+    assert.match(html, /class="error"/);
   });
 });
 

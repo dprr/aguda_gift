@@ -106,6 +106,9 @@ export const T = {
     thanks: "תודה. שמרנו את התשובות.",
     pick: "בחר",
     pickFemale: "בחרי",
+    extra: "הצג שאלות נוספות",
+    extraFemale: "הציגי שאלות נוספות",
+    optional: "לא חובה",
     instagramAll: "האינסטגרם של האגודה",
     whatsappAll: "הוואטסאפ של האגודה",
     instagram: "האינסטגרם של האגודה בקמפוס",
@@ -318,6 +321,9 @@ function layout(body: string, wide = false): string {
   /* A follow-up shows only once its own option is picked. CSS only, no JavaScript. */
   .option input:not(:checked) ~ .follow { display: none; }
   .when { display: none; margin-block-start: 0.5rem; }
+  .extra-toggle { font-weight: 600; margin-block-end: 1rem; }
+  .extra { display: none; }
+  form:has(.extra-toggle input:checked) .extra { display: block; }
   textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.5rem; }
 </style>
 </head>
@@ -517,37 +523,51 @@ export function surveyPage(
     return out;
   };
 
-  const fields = survey.questions
-    .map((q) => {
-      const label = (female && q.labelFemale) || q.label;
-      const mark = q.required ? ` <span class="hint">(${T.survey.required})</span>` : "";
-      const error = state.errors?.[q.id] ? `<p class="error">${(female ? T.survey.errorsFemale : T.survey.errors)[state.errors[q.id]]}</p>` : "";
-      let input: string;
-      if (q.kind === "text") {
-        input = `<textarea name="${esc(q.id)}" rows="3" maxlength="1000">${esc(values[q.id])}</textarea>`;
-      } else if (q.kind === "choice" && q.dropdown) {
-        const options = q.options
-          .map((o) => `<option value="${esc(o.value)}"${has(q, o.value) ? " selected" : ""}>${esc((female && o.labelFemale) || o.label)}</option>`)
-          .join("");
-        input = `<select name="${esc(q.id)}"><option value="">${female ? T.survey.pickFemale : T.survey.pick}</option>${options}</select>`;
-        // A dropdown option's follow-up sits after the box. CSS shows it only while that
-        // option is selected, with no JavaScript.
-        for (const o of q.options.filter((x) => x.follow)) {
-          input += `<div class="when" data-when="${esc(o.value)}">${followUp(q, o)}</div>
+  const field = (q: Question) => {
+    const label = (female && q.labelFemale) || q.label;
+    const mark = q.required ? ` <span class="hint">(${T.survey.required})</span>` : "";
+    const error = state.errors?.[q.id] ? `<p class="error">${(female ? T.survey.errorsFemale : T.survey.errors)[state.errors[q.id]]}</p>` : "";
+    let input: string;
+    if (q.kind === "text") {
+      input = `<textarea name="${esc(q.id)}" rows="3" maxlength="1000">${esc(values[q.id])}</textarea>`;
+    } else if (q.kind === "choice" && q.dropdown) {
+      const options = q.options
+        .map((o) => `<option value="${esc(o.value)}"${has(q, o.value) ? " selected" : ""}>${esc((female && o.labelFemale) || o.label)}</option>`)
+        .join("");
+      input = `<select name="${esc(q.id)}"><option value="">${female ? T.survey.pickFemale : T.survey.pick}</option>${options}</select>`;
+      // A dropdown option's follow-up sits after the box. CSS shows it only while that
+      // option is selected, with no JavaScript.
+      for (const o of q.options.filter((x) => x.follow)) {
+        input += `<div class="when" data-when="${esc(o.value)}">${followUp(q, o)}</div>
 <style>.question:has(select[name="${esc(q.id)}"] option[value="${esc(o.value)}"]:checked) .when[data-when="${esc(o.value)}"] { display: block; }</style>`;
-        }
-      } else {
-        const type = q.kind === "choice" ? "radio" : "checkbox";
-        input = q.options
-          .map((o) => {
-            const optionLabel = (female && o.labelFemale) || o.label;
-            return `<label class="option"><input type="${type}" name="${esc(q.id)}" value="${esc(o.value)}"${has(q, o.value) ? " checked" : ""}> ${esc(optionLabel)}${followUp(q, o)}</label>`;
-          })
-          .join("");
       }
-      return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${links(q)}${error}${input}</fieldset>`;
-    })
-    .join("\n");
+    } else {
+      const type = q.kind === "choice" ? "radio" : "checkbox";
+      input = q.options
+        .map((o) => {
+          const optionLabel = (female && o.labelFemale) || o.label;
+          return `<label class="option"><input type="${type}" name="${esc(q.id)}" value="${esc(o.value)}"${has(q, o.value) ? " checked" : ""}> ${esc(optionLabel)}${followUp(q, o)}</label>`;
+        })
+        .join("");
+    }
+    return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${links(q)}${error}${input}</fieldset>`;
+  };
+
+  // The extra questions come last, inside a section a checkbox opens. CSS only, no
+  // JavaScript. The checkbox has no name, so it is never submitted. It starts checked when
+  // the student already answered an extra question, or one has an error, so nothing the
+  // student must see stays hidden.
+  const main = survey.questions.filter((q) => !q.extra);
+  const extra = survey.questions.filter((q) => q.extra);
+  const answered = (q: Question) =>
+    state.errors?.[q.id] !== undefined || (values[q.id] !== undefined && values[q.id] !== "");
+  const extraSection = extra.length
+    ? `<label class="option extra-toggle"><input type="checkbox"${extra.some(answered) ? " checked" : ""}> ${female ? T.survey.extraFemale : T.survey.extra} <span class="hint">(${T.survey.optional})</span></label>
+<div class="extra">
+${extra.map(field).join("\n")}
+</div>`
+    : "";
+  const fields = `${main.map(field).join("\n")}\n${extraSection}`;
 
   return layout(`<div class="bar"><h1>${T.survey.title}</h1>${logoutForm(s.gender)}</div>
 <p>${female ? T.survey.introFemale : T.survey.intro}</p>
