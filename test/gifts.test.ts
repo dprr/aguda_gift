@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import { pool } from "../src/db.ts";
-import { counterDrift, markTaken, selectGift } from "../src/gifts.ts";
+import { counterDrift, markTaken, resetStudent, selectGift } from "../src/gifts.ts";
 import { freshDatabase, gift, loadStudents, setMember, student } from "./helpers.ts";
 
 beforeEach(() => freshDatabase());
@@ -165,4 +165,65 @@ test("CONCURRENCY: selections and handouts mixed; the counters never drift", asy
     assert.equal(row.requested_count, 30);
     assert.equal(row.given_count, 30);
   }
+});
+
+// ---- request 30: staff let a student start again ---------------------------------------
+
+test("deleting the selection returns the unit, and the student can select again", async () => {
+  const [id] = await loadStudents(1);
+  await selectGift(id, 2);
+  assert.deepEqual(await resetStudent(id, "gift"), { ok: true });
+  assert.equal((await student(id)).gift_id, null);
+  assert.ok((await student(id)).survey, "the survey stays");
+  assert.equal((await gift(2)).requested_count, 0);
+  assert.equal((await selectGift(id, 3)).ok, true);
+  assert.deepEqual(await counterDrift(), []);
+});
+
+test("deleting all clears the survey too, so the student must answer it again", async () => {
+  const [id] = await loadStudents(1);
+  await selectGift(id, 1);
+  assert.deepEqual(await resetStudent(id, "all"), { ok: true });
+  const s = await student(id);
+  assert.equal(s.gift_id, null);
+  assert.equal(s.survey, null);
+  assert.deepEqual(await selectGift(id, 1), { ok: false, reason: "survey_missing" });
+  assert.deepEqual(await counterDrift(), []);
+});
+
+test("a survey alone can be deleted; with nothing to delete, nothing changes", async () => {
+  const [id, fresh] = await loadStudents(2);
+  await pool.query("UPDATE students SET survey = NULL WHERE national_id = $1", [fresh]);
+  assert.deepEqual(await resetStudent(id, "gift"), { ok: false, reason: "nothing" });
+  assert.deepEqual(await resetStudent(id, "all"), { ok: true });
+  assert.deepEqual(await resetStudent(fresh, "all"), { ok: false, reason: "nothing" });
+  assert.deepEqual(await resetStudent("999", "all"), { ok: false, reason: "unknown_student" });
+});
+
+test("never after the handout: the student could collect a second gift", async () => {
+  const [id] = await loadStudents(1);
+  await selectGift(id, 4);
+  await markTaken(id);
+  for (const what of ["gift", "all"] as const) {
+    assert.deepEqual(await resetStudent(id, what), { ok: false, reason: "taken" });
+  }
+  const s = await student(id);
+  assert.equal(s.gift_id, 4);
+  assert.ok(s.survey);
+  assert.equal((await gift(4)).requested_count, 1);
+});
+
+test("a deletion and a handout of one selection at the same moment: never both", async () => {
+  for (let round = 0; round < 20; round++) {
+    await freshDatabase();
+    const [id] = await loadStudents(1);
+    await selectGift(id, 1);
+    const [reset, take] = await Promise.all([resetStudent(id, "gift"), markTaken(id)]);
+    assert.ok(reset.ok !== take.ok, `round ${round}: exactly one wins`);
+    assert.deepEqual(await counterDrift(), []);
+  }
+});
+
+test("the database refuses a requested_count below zero", async () => {
+  await assert.rejects(pool.query("UPDATE gifts SET requested_count = -1 WHERE id = 1"), /gifts_requested_not_negative/);
 });

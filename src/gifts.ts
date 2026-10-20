@@ -103,6 +103,42 @@ export async function markTaken(nationalId: string): Promise<TakeResult> {
   });
 }
 
+export type ResetResult =
+  | { ok: true }
+  | { ok: false; reason: "unknown_student" | "taken" | "nothing" };
+
+/**
+ * Request 30. Any staff member deletes a student's gift selection ("gift"), or the survey
+ * answers and the selection ("all"), so the student can start again. The unit returns to
+ * the stock.
+ *
+ * Never after the handout: the student could then select, and collect, a second gift.
+ * The row lock makes this and a desk's markTaken() run one after the other, so a handout
+ * and a deletion of the same selection can never both succeed.
+ */
+export async function resetStudent(nationalId: string, what: "gift" | "all"): Promise<ResetResult> {
+  return transaction(async (db) => {
+    const row = await db.query(
+      "SELECT gift_id, gift_taken_at, survey IS NOT NULL AS surveyed FROM students WHERE national_id = $1 FOR UPDATE",
+      [nationalId],
+    );
+    const s = row.rows[0];
+    if (!s) return { ok: false, reason: "unknown_student" };
+    if (s.gift_taken_at) return { ok: false, reason: "taken" };
+    if (s.gift_id === null && (what === "gift" || !s.surveyed)) return { ok: false, reason: "nothing" };
+
+    await db.query(
+      `UPDATE students SET gift_id = NULL, survey = CASE WHEN $2 THEN NULL ELSE survey END
+        WHERE national_id = $1`,
+      [nationalId, what === "all"],
+    );
+    if (s.gift_id !== null) {
+      await db.query("UPDATE gifts SET requested_count = requested_count - 1 WHERE id = $1", [s.gift_id]);
+    }
+    return { ok: true };
+  });
+}
+
 /**
  * Plan §4.2. The counters are stored, but `students` is the truth. Returns every gift whose
  * counter disagrees with the student rows. An empty list means no drift.

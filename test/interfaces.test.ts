@@ -270,6 +270,54 @@ describe("staff page", () => {
     assert.match(res.body, /המונים אינם תואמים/);
   });
 
+  test("any staff member deletes a selection, after a confirm step (request 30)", async () => {
+    await selectGift(ids[0], 2);
+    const cookies = await asStaff(); // a worker
+    const card = await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: ids[0] }) });
+    assert.match(card.body, /name="what" value="gift">\s*<button class="button secondary">מחק את בחירת המתנה/);
+    assert.match(card.body, /name="what" value="all">\s*<button class="button secondary">מחק את הסקר ואת בחירת המתנה/);
+
+    const confirm = await app.inject({ method: "POST", url: "/staff/reset", cookies, ...form({ national_id: ids[0], what: "gift" }) });
+    assert.match(confirm.body, /אישור מחיקה/);
+    assert.match(confirm.body, /name="confirm" value="1"/);
+    assert.equal((await student(ids[0])).gift_id, 2, "the confirm page changes nothing");
+
+    const done = await app.inject({ method: "POST", url: "/staff/reset", cookies, ...form({ national_id: ids[0], what: "gift", confirm: "1" }) });
+    assert.match(done.body, /מחקנו. הסטודנט יכול להתחיל מחדש./);
+    assert.equal((await student(ids[0])).gift_id, null);
+    assert.equal((await gift(2)).requested_count, 0);
+    const page = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
+    assert.equal(count(page.body, 'href="/student/confirm?gift='), 4, "the student selects again");
+  });
+
+  test("deleting the survey and the selection sends the student back to the survey", async () => {
+    await selectGift(ids[0], 1);
+    const res = await app.inject({ method: "POST", url: "/staff/reset", cookies: await asStaff(), ...form({ national_id: ids[0], what: "all", confirm: "1" }) });
+    assert.match(res.body, /class="ok"/);
+    assert.match(res.body, /name="national_id"/, "the card stays on the page");
+    const page = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
+    assert.match(page.body, /action="\/student\/survey"/);
+  });
+
+  test("no delete buttons after the handout, and a forced request deletes nothing", async () => {
+    await selectGift(ids[0], 3);
+    await markTaken(ids[0]);
+    const cookies = await asStaff();
+    const card = await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: ids[0] }) });
+    assert.doesNotMatch(card.body, /\/staff\/reset/);
+    const forced = await app.inject({ method: "POST", url: "/staff/reset", cookies, ...form({ national_id: ids[0], what: "all", confirm: "1" }) });
+    assert.match(forced.body, /כבר קיבל את המתנה, ולכן לא מחקנו דבר/);
+    assert.equal((await student(ids[0])).gift_id, 3);
+    assert.equal((await app.inject({ method: "POST", url: "/staff/reset", cookies, ...form({ national_id: ids[0], what: "drop" }) })).statusCode, 400);
+  });
+
+  test("a student cannot use the delete route", async () => {
+    await selectGift(ids[0], 1);
+    const res = await app.inject({ method: "POST", url: "/staff/reset", cookies: await asStudent(ids[0]), ...form({ national_id: ids[0], what: "gift", confirm: "1" }) });
+    assert.equal(res.statusCode, 403);
+    assert.equal((await student(ids[0])).gift_id, 1);
+  });
+
   test("a national ID never appears in a staff URL", async () => {
     const cookies = await asStaff();
     const res = await app.inject({ method: "POST", url: "/staff/lookup", cookies, ...form({ national_id: ids[0] }) });

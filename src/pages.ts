@@ -144,6 +144,22 @@ export const T = {
     stockCols: ["מתנה", "מלאי התחלתי", "סטודנטים בחרו", "סטודנטים קיבלו", "פנויות לבחירה", "במלאי בפועל"],
     drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. דווח למפתח.",
     manage: "נהל עובדים ומלאי",
+    /** Request 30: any staff member lets a student start again. */
+    resetGift: "מחק את בחירת המתנה",
+    resetAll: "מחק את הסקר ואת בחירת המתנה",
+    resetSurvey: "מחק את הסקר",
+    resetTitle: "אישור מחיקה",
+    resetGiftWarn: "אחרי המחיקה, הסטודנט יבחר מתנה מחדש. לא נוכל לשחזר את הבחירה.",
+    resetGiftWarnFemale: "אחרי המחיקה, הסטודנטית תבחר מתנה מחדש. לא נוכל לשחזר את הבחירה.",
+    resetAllWarn: "אחרי המחיקה, הסטודנט ימלא את הסקר מחדש ויבחר מתנה מחדש. לא נוכל לשחזר את התשובות ואת הבחירה.",
+    resetAllWarnFemale: "אחרי המחיקה, הסטודנטית תמלא את הסקר מחדש ותבחר מתנה מחדש. לא נוכל לשחזר את התשובות ואת הבחירה.",
+    resetConfirm: "מחק",
+    back: "חזור",
+    resetDone: "מחקנו. הסטודנט יכול להתחיל מחדש.",
+    resetDoneFemale: "מחקנו. הסטודנטית יכולה להתחיל מחדש.",
+    resetTaken: "הסטודנט כבר קיבל את המתנה, ולכן לא מחקנו דבר.",
+    resetTakenFemale: "הסטודנטית כבר קיבלה את המתנה, ולכן לא מחקנו דבר.",
+    resetNothing: "לא מצאנו בחירה או סקר למחוק.",
   },
 
   manager: {
@@ -564,6 +580,19 @@ function studentCard(s: StudentView, giftNames: Map<number, string>): string {
 </form>`;
   }
 
+  // Request 30: let the student start again. Never after the handout (gifts.ts).
+  const resetForm = (what: "gift" | "all", label: string) => `<form method="post" action="/staff/reset">
+  <input type="hidden" name="national_id" value="${esc(s.national_id)}">
+  <input type="hidden" name="what" value="${what}">
+  <button class="button secondary">${label}</button>
+</form>`;
+  const reset = s.gift_taken_at
+    ? ""
+    : (s.gift_id !== null ? resetForm("gift", T.staff.resetGift) : "") +
+      (s.gift_id !== null || s.survey_submitted
+        ? resetForm("all", s.gift_id !== null ? T.staff.resetAll : T.staff.resetSurvey)
+        : "");
+
   const history = s.interactions.length
     ? `<h3>${T.staff.history}</h3><ul>${s.interactions
         .map((i) => `<li>${when(i.at)} ${T.staff.collected} ${esc(giftNames.get(i.gift_id!) ?? i.gift_id)}</li>`)
@@ -579,8 +608,28 @@ function studentCard(s: StudentView, giftNames: Map<number, string>): string {
   <dt>${T.staff.status}</dt><dd>${s.gift_taken_at ? `${f ? T.staff.takenAtFemale : T.staff.takenAt} ${when(s.gift_taken_at)}` : f ? T.staff.notTakenFemale : T.staff.notTaken}</dd>
 </dl>
 ${action}
+${reset}
 ${history}
 </div>`;
+}
+
+/** Request 30: deleting cannot be undone, so it takes a second, explicit step. */
+export function resetConfirmPage(s: StudentView, what: "gift" | "all"): string {
+  const f = isFemale(s.gender);
+  const warn = what === "gift"
+    ? f ? T.staff.resetGiftWarnFemale : T.staff.resetGiftWarn
+    : f ? T.staff.resetAllWarnFemale : T.staff.resetAllWarn;
+  return layout(`<h1>${T.staff.resetTitle}</h1>
+<p class="big">${esc(s.first_name)} ${esc(s.last_name)}</p>
+<p>${ltr(s.national_id)}${s.gift_name ? ` · ${esc(s.gift_name)}` : ""}</p>
+<p class="warn">${warn}</p>
+<form method="post" action="/staff/reset">
+  <input type="hidden" name="national_id" value="${esc(s.national_id)}">
+  <input type="hidden" name="what" value="${what}">
+  <input type="hidden" name="confirm" value="1">
+  <button class="button">${T.staff.resetConfirm}</button>
+</form>
+<a class="button secondary" href="/staff">${T.staff.back}</a>`);
 }
 
 export function staffPage(options: {

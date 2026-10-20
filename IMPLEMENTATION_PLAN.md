@@ -278,9 +278,12 @@ code path, and the constraint applies to **every** writer, including the seed sc
 person who edits a row by hand. The invariant is request 19 itself: a
 violation means Aguda promised gifts it did not buy.
 
-**No other check.** `requested_count >= 0` cannot fail, because the counter only
-increments in v1; §15.1 adds it when the gift-change flow returns and starts decrementing.
-`given_count <= requested_count` cannot fail either, because §5.2 requires a non-null
+**`requested_count >= 0`** (`gifts_requested_not_negative`, request 30). Staff can now
+delete a selection, so the counter also goes down. The deletion locks the student row and
+decrements only for a selection it really cleared, so the check should never fire; it
+guards every other writer.
+
+**No other check.** `given_count <= requested_count` cannot fail either, because §5.2 requires a non-null
 `gift_id`, and that means §5.1 already incremented `requested_count` for the same gift.
 
 **The counters are derived values that this plan stores anyway**, because §0 normally
@@ -676,8 +679,9 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | Two records of one national ID with different personal details | The whole response is refused. None in the 2026 list | A rule for which record wins |
 | A student studies two programs at once | The second overwrites the first | A `student_programs` table |
 | A report must query the arrays across students | `membership_history` and `interactions` need `jsonb_array_elements`, and no index helps | Move the array into its own table with typed columns |
-| A student wants a different gift after choosing | Nothing can change it. The student keeps it | §15.1. The owner deferred this flow |
-| A lapsed member never renews | Refused at the desk. The unit stays in `requested_count` forever, and no other student can take it | A release path: clear `gift_id` and decrement `requested_count` in one statement |
+| A student wants a different gift after choosing | Any staff member deletes the selection (request 30), and the student selects again. Not after the handout | §15.1, if staff should pick the new gift themselves |
+| Who deleted a selection or a survey | Not recorded. The old selection and answers are gone | An interaction entry with the staff email |
+| A lapsed member never renews | Refused at the desk. The unit stays held until a staff member deletes the selection (request 30) | Nothing more |
 | A wrong national ID must be corrected | `UPDATE students SET national_id = ...`. No table references it, so nothing else changes | Nothing. Add `ON UPDATE CASCADE` only when a second table points at it |
 | The source gives a real effective date | The `at` field records the observation time | An `effective_from` field in each `membership_history` entry |
 | The interfaces need English | Hebrew only, with all strings in one module | An i18n framework |
@@ -723,6 +727,7 @@ document is a wish list, and a section in it is not a request.
 | 27 | The real student list comes from the university's `AgudaStudents` service. Everyone on it is a member; a student absent from a later list is no longer a member. Duplicate records with the same details merge. The desk search ignores leading zeros. A student can have several campuses, and `אדמונד י' ספרא` shows as `גבעת רם`. `specialPopulationsList` is stored, for special services. Students who cannot log in are listed, with no special handling |
 | 28 | A manager can add another manager from the website |
 | 29 | A third staff role, מנכ"ל: everything a manager has, plus a download of the data |
+| 30 | Every staff role can delete a student's gift selection, or the survey and the selection, so the student can start again |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
@@ -737,13 +742,15 @@ Nothing here gets built until it moves to §14.
 
 ### 15.1 An employee changes a student's gift
 
+**Partly built by request 30:** staff delete the selection, the unit returns, and the
+student selects again on the student page. `resetStudent()` in `src/gifts.ts` uses the
+row lock below. What remains is an employee picking the new gift directly.
+
 **Why it is wanted.** A student selects the wrong gift and then arrives at the desk. In
 version 1 nobody can correct it, so the student keeps a gift they did not want. This is
 the problem the owner originally asked about.
 
-⚠️ **What version 1 must not do.** Do not add any constraint that stops a counter from
-falling. Restoring this flow makes `requested_count` decrease, so
-`requested_count >= 0` is the only safe check to write.
+`requested_count >= 0` now exists (request 30), and this flow keeps it true.
 
 **What it needs.**
 

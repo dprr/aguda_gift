@@ -6,8 +6,8 @@ import formbody from "@fastify/formbody";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, type Door, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
-import { markTaken, selectGift } from "./gifts.ts";
-import { confirmPage, demoBanner, esc, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
+import { markTaken, resetStudent, selectGift } from "./gifts.ts";
+import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { addStaff, listStaff, RANK, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
@@ -408,6 +408,34 @@ export async function buildApp(options: AppOptions) {
       } else {
         message = { kind: "error", text: T.staff.notFound };
       }
+      return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: true, message }));
+    },
+  );
+
+  // Request 30: any staff member deletes a student's selection, or the survey and the
+  // selection, so the student can start again. The first POST shows a confirm page; the
+  // second, with confirm=1, deletes. The national ID stays in the POST body (plan §12).
+  app.post<{ Body: { national_id?: string; what?: string; confirm?: string } }>(
+    "/staff/reset",
+    { preHandler: requireStaff() },
+    async (request, reply) => {
+      const id = deskId(request.body?.national_id);
+      const what = request.body?.what;
+      if (what !== "gift" && what !== "all") return reply.code(400).send("Bad request");
+      const before = await findStudent(id);
+      if (!before) {
+        return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student: null, searched: true }));
+      }
+      if (request.body?.confirm !== "1") return html(reply, resetConfirmPage(before, what));
+
+      const result = await resetStudent(id, what);
+      const student = await findStudent(id);
+      const f = isFemale(student?.gender ?? null);
+      const message: Notice = result.ok
+        ? { kind: "ok", text: f ? T.staff.resetDoneFemale : T.staff.resetDone }
+        : result.reason === "taken"
+          ? { kind: "error", text: f ? T.staff.resetTakenFemale : T.staff.resetTaken }
+          : { kind: "warn", text: T.staff.resetNothing };
       return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: true, message }));
     },
   );
