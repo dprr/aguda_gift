@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
-import type { Role } from "./staff.ts";
+import { mayRemove, type Role } from "./staff.ts";
 import { AGUDA_SOCIAL, CAMPUS_SOCIAL, campusLabel, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
 export const T = {
@@ -171,7 +171,7 @@ export const T = {
     staff: "צוות",
     staffCols: ["דוא\"ל", "תפקיד", ""],
     roles: { worker: "עובד", manager: "מנהל", ceo: "מנכ\"ל" },
-    managersHint: "כדי להסיר מנהל או מנכ\"ל, פנה למפתח.",
+    managersHint: "רק מנכ\"ל יכול להסיר מנהל או מנכ\"ל.",
     newStaff: "כתובת דוא\"ל, בחשבון של האוניברסיטה או של האגודה",
     role: "תפקיד",
     add: "הוסף",
@@ -190,7 +190,7 @@ export const T = {
       added_ceo: "הוספנו את המנכ\"ל.",
       promoted_manager: "עדכנו את התפקיד למנהל.",
       promoted_ceo: "עדכנו את התפקיד למנכ\"ל.",
-      removed: "הסרנו את העובד.",
+      removed: "הסרנו את הכתובת מרשימת הצוות.",
       stock: "שמרנו את המלאי.",
     },
     errors: {
@@ -198,7 +198,9 @@ export const T = {
       wrong_domain: "הכתובת אינה כתובת של האוניברסיטה או של האגודה.",
       higher: "לכתובת הזו כבר יש תפקיד גבוה יותר.",
       exists: "הכתובת הזו כבר ברשימה, באותו תפקיד.",
-      not_found: "העובד אינו ברשימה.",
+      not_found: "הכתובת אינה ברשימת הצוות.",
+      remove_forbidden: "רק מנכ\"ל יכול להסיר מנהל או מנכ\"ל.",
+      remove_self: "אינך יכול להסיר את עצמך.",
       invalid_role: "התפקיד אינו תקין.",
       forbidden_role: "רק מנכ\"ל יכול להוסיף מנכ\"ל.",
       invalid_stock: "הזן מספר שלם, 0 או יותר.",
@@ -750,13 +752,13 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
 </section>`
     : "";
 
-  // Request 25: one list of all the staff, with each person's role. Only a worker has a
-  // remove button; managers change from the command line.
+  // Request 25: one list of all the staff, with each person's role. A remove button only
+  // where this viewer may remove (request 31): a manager, workers; a ceo, anyone but self.
   const staffRows = staff
     .map(
       (m) => `<tr><td>${ltr(m.email)}</td><td>${M.roles[m.role]}</td><td>${
-        m.role === "worker"
-          ? `<form method="post" action="/manager/workers/remove">
+        mayRemove(role, m.role) && m.email !== email
+          ? `<form method="post" action="/manager/staff/remove">
   <input type="hidden" name="email" value="${esc(m.email)}">
   <button class="button secondary small">${M.remove}</button>
 </form>`
@@ -782,7 +784,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
 ${notice(message)}
 <section><h2>${M.staff}</h2>
 <table><thead><tr>${M.staffCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${staffRows}</tbody></table>
-<p class="hint">${M.managersHint}</p>
+${role === "ceo" ? "" : `<p class="hint">${M.managersHint}</p>`}
 <form method="post" action="/manager/staff/add">
   <label>${M.newStaff}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
   <label>${M.role} <select name="role">${roleOptions}</select></label>

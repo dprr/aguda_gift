@@ -38,7 +38,7 @@ the later section is wrong.
 | **Tables** | **3: `students`, `gifts`, and `staff`** | §0. `staff` serves requests 24 and 25. Everything else serves no line in §14 |
 | Login | Two pages: students at `/`, staff at `/staff/login`. Google on both | Request 24. See §2 |
 | Passwords | **None** | Google authenticates. No reset path |
-| Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Requests 25, 28, 29. Three roles, each with everything of the one below: `worker` (the desk), `manager` (also `/manager`: add staff, remove workers, set the stock), `ceo` (מנכ"ל, also download the data). Only a ceo or the `staff` command gives the ceo role. Only the `staff` command removes a manager or a ceo |
+| Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Requests 25, 28, 29. Three roles, each with everything of the one below: `worker` (the desk), `manager` (also `/manager`: add staff, remove workers, set the stock), `ceo` (מנכ"ל, also download the data, and remove anyone but themselves, request 31). Only a ceo or the `staff` command gives the ceo role |
 | Identity key | National ID is the primary key | HUJI uses it as the student number. One identifier |
 | Student arrays | `membership_history` and `interactions`, both jsonb on the student row | Requests 13 and 18. No history table, and no interactions table |
 | Stock counters | `starting_inventory`, `requested_count`, `given_count` on `gifts` | Requests 16 and 19. §5.1 refuses a selection when a gift is sold out. The handout needs no stock check |
@@ -316,7 +316,8 @@ screen. A counter that drifts is then visible instead of silent.
 Every employee, in one list (request 25). The manager page shows the whole list with
 each role, the highest first. It adds staff (requests 28 and 29): adding a person who
 already has a lower role raises the role, in one statement. Nothing on the page lowers a
-role, and it removes **workers only**.
+role. A manager removes **workers only**; a ceo removes anyone but themselves (request
+31), so at least one ceo always remains.
 
 ⚠️ **Only a ceo gives the ceo role,** because a ceo downloads every student's details. A
 manager does not even see the option, and the server refuses it.
@@ -660,7 +661,7 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | §7.2 Questionnaire, editable on a screen | Built as request 22, but the questions live in `src/survey.ts`, so a change needs a developer and a deploy | A questions table and an editing screen. The stored answers carry a `version`, so old answers stay readable |
 | §6.1, §6.2 Campus permissions | A manager or a worker acts on every campus | A campus column on `staff`, and a campus check on every location-scoped route |
 | Who added or removed a worker | Not recorded | An `added_by` column, or an audit log |
-| Removing or demoting a manager or a ceo on the website | Only the `staff` command does it | A remove button on `/manager`, with a rule that keeps at least one ceo |
+| Demoting a manager or a ceo on the website | A ceo removes the person and adds them again with the lower role | A role selector on each row |
 | Opening a CSV directly in Excel drops the leading zero of phone numbers | Import it with Data → From Text/CSV, and set the column to Text | An `.xlsx` download, which needs a library |
 | §5.1 Collection locations | Not recorded. The handout stores only the time | `campuses` and `collection_locations` tables |
 | §3.2 Sync scheduling UI | The worker runs on a fixed interval | An administrator screen, and a schedule record |
@@ -728,6 +729,7 @@ document is a wish list, and a section in it is not a request.
 | 28 | A manager can add another manager from the website |
 | 29 | A third staff role, מנכ"ל: everything a manager has, plus a download of the data |
 | 30 | Every staff role can delete a student's gift selection, or the survey and the selection, so the student can start again |
+| 31 | A מנכ"ל can remove managers (and other staff) from the website |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

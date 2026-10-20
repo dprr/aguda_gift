@@ -4,8 +4,8 @@
  *
  *   worker   the distribution desk
  *   manager  also the manager page: add staff, remove workers, set the stock
- *   ceo      (מנכ"ל) also download the data. Only a ceo or the command line adds a ceo,
- *            because a ceo can read every student's details
+ *   ceo      (מנכ"ל) also download the data, and remove anyone but themselves. Only a ceo
+ *            or the command line adds a ceo, because a ceo can read every student's details
  *
  * The command line, at the end of this file, adds the first manager or ceo, and removes
  * managers and ceos.
@@ -70,10 +70,25 @@ export async function addStaff(email: string, role: string, staffDomains: string
   return { ok: false, reason: (await roleOf(checked.email)) === role ? "exists" : "higher" };
 }
 
-/** Workers only. The manager page cannot remove a manager. */
-export async function removeWorker(email: string): Promise<boolean> {
-  const r = await pool.query("DELETE FROM staff WHERE email = $1 AND role = 'worker'", [email.trim().toLowerCase()]);
-  return r.rowCount === 1;
+export type RemoveStaffResult = { ok: true } | { ok: false; reason: "not_found" | "forbidden" | "self" };
+
+/** Whether `by` may remove a person with role `target`: a manager, workers only; a ceo, anyone. */
+export const mayRemove = (by: Role, target: Role) => by === "ceo" || target === "worker";
+
+/**
+ * Request 31. A manager removes workers. A ceo removes anyone except themselves. Only a ceo
+ * removes a ceo, and never the one removing, so at least one ceo always remains. The rule
+ * sits in the WHERE clause, so a role that changes at the same moment cannot slip past it.
+ */
+export async function removeStaff(email: string, by: { email: string; role: Role }): Promise<RemoveStaffResult> {
+  const e = email.trim().toLowerCase();
+  if (e === by.email.toLowerCase()) return { ok: false, reason: "self" };
+  const r = await pool.query(
+    "DELETE FROM staff WHERE email = $1 AND ($2 = 'ceo' OR role = 'worker')",
+    [e, by.role],
+  );
+  if (r.rowCount) return { ok: true };
+  return { ok: false, reason: (await roleOf(e)) ? "forbidden" : "not_found" };
 }
 
 export type SetStockResult =

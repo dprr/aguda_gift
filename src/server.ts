@@ -10,7 +10,7 @@ import { markTaken, resetStudent, selectGift } from "./gifts.ts";
 import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
-import { addStaff, listStaff, RANK, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
+import { addStaff, listStaff, RANK, removeStaff, type Role, roleOf, setStock } from "./staff.ts";
 import { exportCsv, isExport } from "./export.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
@@ -475,11 +475,11 @@ export async function buildApp(options: AppOptions) {
   );
 
   app.post<{ Body: { email?: string } }>(
-    "/manager/workers/remove",
+    "/manager/staff/remove",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      const removed = await removeWorker(request.body?.email ?? "");
-      return reply.redirect(removed ? "/manager?done=removed" : "/manager?error=not_found");
+      const result = await removeStaff(request.body?.email ?? "", { email: staffEmail(request), role: staffRole(request) });
+      return reply.redirect(result.ok ? "/manager?done=removed" : `/manager?error=${result.reason === "not_found" ? "not_found" : `remove_${result.reason}`}`);
     },
   );
 

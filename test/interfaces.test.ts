@@ -450,15 +450,41 @@ describe("manager page", () => {
     assert.match(res.body, /<select name="role"><option value="worker">עובד<\/option><option value="manager">מנהל<\/option><\/select>/);
   });
 
-  test("the manager page cannot remove a manager", async () => {
-    const res = await app.inject({ method: "POST", url: "/manager/workers/remove", cookies: await asManager(), ...form({ email: "boss@aguda.org.il" }) });
-    assert.equal(res.headers.location, "/manager?error=not_found");
-    assert.equal((await pool.query("SELECT role FROM staff WHERE email = 'boss@aguda.org.il'")).rows[0].role, "manager");
+  test("a manager cannot remove a manager or a ceo, and sees no button for them", async () => {
+    await pool.query("INSERT INTO staff (email, role) VALUES ('other@aguda.org.il', 'manager'), ('chief@aguda.org.il', 'ceo')");
+    const cookies = await asManager();
+    for (const email of ["other@aguda.org.il", "chief@aguda.org.il"]) {
+      const res = await app.inject({ method: "POST", url: "/manager/staff/remove", cookies, ...form({ email }) });
+      assert.equal(res.headers.location, "/manager?error=remove_forbidden", email);
+    }
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM staff")).rows[0].n, 4);
+    const page = (await app.inject({ url: "/manager", cookies })).body;
+    assert.equal(page.split('action="/manager/staff/remove"').length - 1, 1, "a button only for the worker");
+    assert.match(page, /רק מנכ"ל יכול להסיר מנהל או מנכ"ל/);
+  });
+
+  test("a ceo removes a manager and another ceo, but never themselves (request 31)", async () => {
+    await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo'), ('chief2@aguda.org.il', 'ceo')");
+    const cookies = await login({ kind: "staff", email: "chief@aguda.org.il" });
+    const boss = await asManager();
+    const page = (await app.inject({ url: "/manager", cookies })).body;
+    // boss, chief2, dana have buttons; chief (self) has none.
+    assert.equal(page.split('action="/manager/staff/remove"').length - 1, 3);
+    assert.doesNotMatch(page, /name="email" value="chief@aguda\.org\.il"/);
+
+    const remove = (email: string) => app.inject({ method: "POST", url: "/manager/staff/remove", cookies, ...form({ email }) });
+    assert.equal((await remove("boss@aguda.org.il")).headers.location, "/manager?done=removed");
+    assert.equal((await remove("chief2@aguda.org.il")).headers.location, "/manager?done=removed");
+    assert.equal((await remove("Chief@aguda.org.il")).headers.location, "/manager?error=remove_self");
+    assert.equal((await remove("nobody@aguda.org.il")).headers.location, "/manager?error=not_found");
+    const left = (await pool.query("SELECT email FROM staff ORDER BY email")).rows.map((r) => r.email);
+    assert.deepEqual(left, ["chief@aguda.org.il", "dana@aguda.org.il"]);
+    assert.equal((await app.inject({ url: "/staff", cookies: boss })).headers.location, "/staff/login?error=not_staff", "a removed manager is locked out at once");
   });
 
   test("a manager removes a worker, and the worker is locked out at once", async () => {
     const worker = await asStaff();
-    const res = await app.inject({ method: "POST", url: "/manager/workers/remove", cookies: await asManager(), ...form({ email: "dana@aguda.org.il" }) });
+    const res = await app.inject({ method: "POST", url: "/manager/staff/remove", cookies: await asManager(), ...form({ email: "dana@aguda.org.il" }) });
     assert.equal(res.headers.location, "/manager?done=removed");
     assert.deepEqual(await workers(), []);
     assert.equal((await app.inject({ url: "/staff", cookies: worker })).headers.location, "/staff/login?error=not_staff");
@@ -468,7 +494,7 @@ describe("manager page", () => {
     const res = await app.inject({ url: "/manager", cookies: await asManager() });
     assert.equal(res.statusCode, 200);
     assert.match(res.body, /boss@aguda\.org\.il<\/bdi><\/td><td>מנהל<\/td><td><\/td>/, "a manager has no remove button");
-    assert.match(res.body, /dana@aguda\.org\.il<\/bdi><\/td><td>עובד<\/td><td><form[^>]*workers\/remove/);
+    assert.match(res.body, /dana@aguda\.org\.il<\/bdi><\/td><td>עובד<\/td><td><form[^>]*staff\/remove/);
     assert.equal(res.body.split('action="/manager/stock"').length - 1, 4);
     assert.equal(res.headers["cache-control"], "no-store");
   });
@@ -477,7 +503,7 @@ describe("manager page", () => {
     const cookies = await asStaff();
     for (const [url, body] of [
       ["/manager/staff/add", { email: "x@aguda.org.il", role: "manager" }],
-      ["/manager/workers/remove", { email: "dana@aguda.org.il" }],
+      ["/manager/staff/remove", { email: "dana@aguda.org.il" }],
       ["/manager/stock", { gift_id: "1", starting_inventory: "99" }],
     ] as const) {
       assert.equal((await app.inject({ method: "POST", url, cookies, ...form(body) })).statusCode, 403, url);
