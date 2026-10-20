@@ -38,7 +38,7 @@ the later section is wrong.
 | **Tables** | **3: `students`, `gifts`, and `staff`** | §0. `staff` serves requests 24 and 25. Everything else serves no line in §14 |
 | Login | Two pages: students at `/`, staff at `/staff/login`. Google on both | Request 24. See §2 |
 | Passwords | **None** | Google authenticates. No reset path |
-| Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Request 25. On `/manager`, managers add workers and managers (request 28), and remove workers. Only the `staff` command (§4.3) removes a manager |
+| Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Requests 25, 28, 29. Three roles, each with everything of the one below: `worker` (the desk), `manager` (also `/manager`: add staff, remove workers, set the stock), `ceo` (מנכ"ל, also download the data). Only a ceo or the `staff` command gives the ceo role. Only the `staff` command removes a manager or a ceo |
 | Identity key | National ID is the primary key | HUJI uses it as the student number. One identifier |
 | Student arrays | `membership_history` and `interactions`, both jsonb on the student row | Requests 13 and 18. No history table, and no interactions table |
 | Stock counters | `starting_inventory`, `requested_count`, `given_count` on `gifts` | Requests 16 and 19. §5.1 refuses a selection when a gift is sold out. The handout needs no stock check |
@@ -308,15 +308,28 @@ screen. A counter that drifts is then visible instead of silent.
 | Column | Type | Notes |
 |---|---|---|
 | `email` | text, primary key, lowercase | Requests 24 and 25. The Google account the person logs in with |
-| `role` | text, `manager` or `worker` | A CHECK constraint allows only these two |
+| `role` | text, `worker`, `manager`, or `ceo` | A CHECK constraint allows only these three (request 29) |
 
 Every employee, in one list (request 25). The manager page shows the whole list with
-each role. It adds workers and managers (request 28): adding a worker as a manager
-promotes the worker, in one statement. It removes **workers only**, and nothing on the page
-demotes a manager. The `staff` command adds the first manager and removes managers:
+each role, the highest first. It adds staff (requests 28 and 29): adding a person who
+already has a lower role raises the role, in one statement. Nothing on the page lowers a
+role, and it removes **workers only**.
+
+⚠️ **Only a ceo gives the ceo role,** because a ceo downloads every student's details. A
+manager does not even see the option, and the server refuses it.
+
+**The ceo's downloads** (request 29): one CSV file per table (`students`, `gifts`,
+`staff`) at `/manager/export/<table>.csv`. CSV opens in Excel and Google Sheets and needs
+no library. The file starts with a UTF-8 byte order mark, so Excel shows the Hebrew. List
+and jsonb values are JSON text in their cells. A cell that starts with `=`, `+`, `-`, or
+`@` gets a leading `'`, so a spreadsheet never runs survey text as a formula. Each
+download writes a log line with the ceo's email.
+
+The `staff` command adds the first manager or ceo, and removes anyone:
 
 ```bash
 npm run staff -- manager someone@aguda.org.il             # on the laptop
+npm run staff -- ceo someone@aguda.org.il
 bash /home/opc/aguda/app/deploy/server.sh staff manager someone@aguda.org.il   # on the server
 ```
 
@@ -644,7 +657,8 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | §7.2 Questionnaire, editable on a screen | Built as request 22, but the questions live in `src/survey.ts`, so a change needs a developer and a deploy | A questions table and an editing screen. The stored answers carry a `version`, so old answers stay readable |
 | §6.1, §6.2 Campus permissions | A manager or a worker acts on every campus | A campus column on `staff`, and a campus check on every location-scoped route |
 | Who added or removed a worker | Not recorded | An `added_by` column, or an audit log |
-| Removing or demoting a manager on the website | Only the `staff` command does it | A remove button for managers on `/manager`, with a rule that keeps at least one manager |
+| Removing or demoting a manager or a ceo on the website | Only the `staff` command does it | A remove button on `/manager`, with a rule that keeps at least one ceo |
+| Opening a CSV directly in Excel drops the leading zero of phone numbers | Import it with Data → From Text/CSV, and set the column to Text | An `.xlsx` download, which needs a library |
 | §5.1 Collection locations | Not recorded. The handout stores only the time | `campuses` and `collection_locations` tables |
 | §3.2 Sync scheduling UI | The worker runs on a fixed interval | An administrator screen, and a schedule record |
 | §3.4 Sync run records | The worker logs. No table | A `sync_runs` table with counts and errors |
@@ -708,6 +722,7 @@ document is a wish list, and a section in it is not a request.
 | 26 | After the survey and the selection, the student can mark the gift as received. This does exactly what the desk's "mark as taken" does |
 | 27 | The real student list comes from the university's `AgudaStudents` service. Everyone on it is a member; a student absent from a later list is no longer a member. Duplicate records with the same details merge. The desk search ignores leading zeros. A student can have several campuses, and `אדמונד י' ספרא` shows as `גבעת רם`. `specialPopulationsList` is stored, for special services. Students who cannot log in are listed, with no special handling |
 | 28 | A manager can add another manager from the website |
+| 29 | A third staff role, מנכ"ל: everything a manager has, plus a download of the data |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

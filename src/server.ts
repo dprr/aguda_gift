@@ -10,7 +10,8 @@ import { markTaken, selectGift } from "./gifts.ts";
 import { confirmPage, demoBanner, esc, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
-import { addStaff, listStaff, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
+import { addStaff, listStaff, RANK, removeWorker, type Role, roleOf, setStock } from "./staff.ts";
+import { exportCsv, isExport } from "./export.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 import { UniversitySource } from "./university.ts";
@@ -252,7 +253,7 @@ export async function buildApp(options: AppOptions) {
    * A staff route checks the role on every request (request 24). An email that left the
    * staff list loses its session at once. A worker on a manager route gets 403.
    */
-  function requireStaff(needed?: "manager") {
+  function requireStaff(needed?: "manager" | "ceo") {
     return async (request: FastifyRequest, reply: FastifyReply) => {
       const session = readSession(request);
       if (!session) return reply.redirect("/staff/login");
@@ -262,7 +263,8 @@ export async function buildApp(options: AppOptions) {
         reply.clearCookie(SESSION_COOKIE, { path: "/" });
         return refuse(reply, "not_staff", "staff");
       }
-      if (needed && role !== needed) return reply.code(403).send("Forbidden");
+      // Each role has everything of the role below it (request 29).
+      if (needed && RANK[role] < RANK[needed]) return reply.code(403).send("Forbidden");
       (request as Authed).session = session;
       (request as Authed).role = role;
     };
@@ -427,6 +429,7 @@ export async function buildApp(options: AppOptions) {
       }
       return html(reply, managerPage({
         email: staffEmail(request),
+        role: staffRole(request),
         staff: await listStaff(),
         gifts: await listGifts(),
         message,
@@ -438,7 +441,7 @@ export async function buildApp(options: AppOptions) {
     "/manager/staff/add",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      const result = await addStaff(request.body?.email ?? "", request.body?.role ?? "", options.domains.staff);
+      const result = await addStaff(request.body?.email ?? "", request.body?.role ?? "", options.domains.staff, staffRole(request));
       return reply.redirect(result.ok ? `/manager?done=${result.done}` : `/manager?error=${result.reason}`);
     },
   );
@@ -463,6 +466,22 @@ export async function buildApp(options: AppOptions) {
           ? `/manager?error=below_requested&min=${result.min}`
           : `/manager?error=${result.reason === "invalid" ? "invalid_stock" : result.reason}`,
       );
+    },
+  );
+
+  // Request 29: a ceo downloads a table as CSV. The name must be one of EXPORTS.
+  app.get<{ Params: { table: string } }>(
+    "/manager/export/:table",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const table = request.params.table.replace(/\.csv$/, "");
+      if (!isExport(table)) return reply.code(404).send("Not found");
+      request.log.info({ export: table, by: staffEmail(request) }, "data export");
+      const date = new Date().toISOString().slice(0, 10);
+      return noStore(reply)
+        .type("text/csv; charset=utf-8")
+        .header("content-disposition", `attachment; filename="aguda-${table}-${date}.csv"`)
+        .send(await exportCsv(table));
     },
   );
 

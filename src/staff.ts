@@ -1,12 +1,20 @@
 /**
- * Requests 24, 25, and 28. Every employee is a row in `staff`, marked manager or worker.
- * Both use the staff login page and the distribution desk; only a manager opens the
- * manager page. There, managers add workers and managers, and remove workers. The command
- * line, at the end of this file, adds the first manager and removes managers.
+ * Requests 24, 25, 28, and 29. Every employee is a row in `staff`, with one of three roles,
+ * each with everything of the role below it:
+ *
+ *   worker   the distribution desk
+ *   manager  also the manager page: add staff, remove workers, set the stock
+ *   ceo      (מנכ"ל) also download the data. Only a ceo or the command line adds a ceo,
+ *            because a ceo can read every student's details
+ *
+ * The command line, at the end of this file, adds the first manager or ceo, and removes
+ * managers and ceos.
  */
 import { pool } from "./db.ts";
 
-export type Role = "manager" | "worker";
+export type Role = "worker" | "manager" | "ceo";
+export const RANK: Record<Role, number> = { worker: 0, manager: 1, ceo: 2 };
+const isRole = (value: string): value is Role => value in RANK;
 export type StaffMember = { email: string; role: Role };
 
 /**
@@ -19,10 +27,10 @@ export async function roleOf(email: string): Promise<Role | null> {
   return r.rows[0]?.role ?? null;
 }
 
-/** Managers first, then workers, each by email. */
+/** The highest role first, then by email. */
 export async function listStaff(): Promise<StaffMember[]> {
-  const r = await pool.query("SELECT email, role FROM staff ORDER BY role = 'worker', email");
-  return r.rows;
+  const r = await pool.query("SELECT email, role FROM staff");
+  return (r.rows as StaffMember[]).sort((a, b) => RANK[b.role] - RANK[a.role] || a.email.localeCompare(b.email));
 }
 
 /** A lowercase email whose domain is one of `staffDomains`, or the reason it is not. */
@@ -35,37 +43,31 @@ function checkEmail(email: string, staffDomains: string[]): { ok: true; email: s
 }
 
 export type AddStaffResult =
-  | { ok: true; done: "added" | "added_manager" | "promoted" }
-  | { ok: false; reason: "invalid" | "wrong_domain" | "manager" | "exists" | "invalid_role" };
+  | { ok: true; done: `added_${Role}` | "promoted_manager" | "promoted_ceo" }
+  | { ok: false; reason: "invalid" | "wrong_domain" | "exists" | "higher" | "invalid_role" | "forbidden_role" };
 
 /**
- * A manager adds a worker or a manager (request 28). Adding a worker as a manager promotes
- * the worker. Nothing here demotes a manager, and only the command line removes one.
- * Staff log in with a university or an Aguda account, so the address needs one of those.
+ * A manager or a ceo adds staff (requests 28 and 29). Adding a person who already has a
+ * lower role raises the role, in one statement. Nothing here lowers a role. Only a ceo may
+ * give the ceo role. Staff log in with a university or an Aguda account, so the address
+ * needs one of those.
  */
-export async function addStaff(email: string, role: string, staffDomains: string[]): Promise<AddStaffResult> {
-  if (role !== "worker" && role !== "manager") return { ok: false, reason: "invalid_role" };
+export async function addStaff(email: string, role: string, staffDomains: string[], by: Role): Promise<AddStaffResult> {
+  if (!isRole(role)) return { ok: false, reason: "invalid_role" };
+  if (role === "ceo" && by !== "ceo") return { ok: false, reason: "forbidden_role" };
   const checked = checkEmail(email, staffDomains);
   if (!checked.ok) return checked;
 
-  if (role === "worker") {
-    const r = await pool.query(
-      "INSERT INTO staff (email, role) VALUES ($1, 'worker') ON CONFLICT DO NOTHING",
-      [checked.email],
-    );
-    if (r.rowCount) return { ok: true, done: "added" };
-    return { ok: false, reason: (await roleOf(checked.email)) === "manager" ? "manager" : "exists" };
-  }
-
-  // One statement: insert a new manager, or promote a worker. xmax = 0 marks an insert.
+  // Insert, or raise a lower role. xmax = 0 marks an insert.
   const r = await pool.query(
-    `INSERT INTO staff (email, role) VALUES ($1, 'manager')
-     ON CONFLICT (email) DO UPDATE SET role = 'manager' WHERE staff.role = 'worker'
+    `INSERT INTO staff (email, role) VALUES ($1, $2)
+     ON CONFLICT (email) DO UPDATE SET role = excluded.role
+       WHERE (CASE staff.role WHEN 'worker' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END) < $3
      RETURNING xmax = 0 AS inserted`,
-    [checked.email],
+    [checked.email, role, RANK[role]],
   );
-  if (!r.rowCount) return { ok: false, reason: "manager" };
-  return { ok: true, done: r.rows[0].inserted ? "added_manager" : "promoted" };
+  if (r.rowCount) return { ok: true, done: r.rows[0].inserted ? `added_${role}` : role === "ceo" ? "promoted_ceo" : "promoted_manager" };
+  return { ok: false, reason: (await roleOf(checked.email)) === role ? "exists" : "higher" };
 }
 
 /** Workers only. The manager page cannot remove a manager. */
@@ -100,22 +102,23 @@ export async function setStock(giftId: number, value: string): Promise<SetStockR
 
 // ---- command line -----------------------------------------------------------------------
 //   npm run staff                            list the staff
-//   npm run staff -- manager <email>         add a manager, or make a worker a manager
-//   npm run staff -- remove <email>          remove a manager or a worker
+//   npm run staff -- manager <email>         add a manager, or set an existing person's role to manager
+//   npm run staff -- ceo <email>             add a ceo, or set an existing person's role to ceo
+//   npm run staff -- remove <email>          remove anyone
 // On the server: bash /home/opc/aguda/app/deploy/server.sh staff manager <email>
 
 if (import.meta.main) {
   const [command, email = ""] = process.argv.slice(2);
   const domains = (process.env.STAFF_DOMAINS ?? "mail.huji.ac.il,aguda.org.il").split(",").map((d) => d.trim().toLowerCase());
   let code = 0;
-  if (command === "manager") {
+  if (command === "manager" || command === "ceo") {
     const checked = checkEmail(email, domains);
     if (checked.ok) {
       await pool.query(
-        "INSERT INTO staff (email, role) VALUES ($1, 'manager') ON CONFLICT (email) DO UPDATE SET role = 'manager'",
-        [checked.email],
+        "INSERT INTO staff (email, role) VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET role = excluded.role",
+        [checked.email, command],
       );
-      console.log(`${checked.email} is a manager`);
+      console.log(`${checked.email} is a ${command}`);
     } else {
       console.error(`refused: ${checked.reason}. Use an address in ${domains.join(" or ")}`);
       code = 1;
@@ -127,7 +130,7 @@ if (import.meta.main) {
   } else if (command === undefined) {
     for (const m of await listStaff()) console.log(`${m.role}\t${m.email}`);
   } else {
-    console.error("usage: node src/staff.ts [manager <email> | remove <email>]");
+    console.error("usage: npm run staff -- [manager <email> | ceo <email> | remove <email>]");
     code = 1;
   }
   await pool.end();

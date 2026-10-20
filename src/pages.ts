@@ -5,6 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
+import type { Role } from "./staff.ts";
 import { AGUDA_SOCIAL, CAMPUS_SOCIAL, campusLabel, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
 export const T = {
@@ -150,8 +151,8 @@ export const T = {
     back: "חזור לעמדת החלוקה",
     staff: "צוות",
     staffCols: ["דוא\"ל", "תפקיד", ""],
-    roles: { manager: "מנהל", worker: "עובד" },
-    managersHint: "כדי להסיר מנהל, פנה למפתח.",
+    roles: { worker: "עובד", manager: "מנהל", ceo: "מנכ\"ל" },
+    managersHint: "כדי להסיר מנהל או מנכ\"ל, פנה למפתח.",
     newStaff: "כתובת דוא\"ל, בחשבון של האוניברסיטה או של האגודה",
     role: "תפקיד",
     add: "הוסף",
@@ -160,20 +161,27 @@ export const T = {
     stockHint: "המלאי ההתחלתי הוא כמות היחידות שהאגודה קנתה מכל מתנה.",
     stockCols: ["מתנה", "סטודנטים בחרו", "סטודנטים קיבלו", "מלאי התחלתי"],
     save: "שמור",
+    /** Request 29: the ceo's downloads, one CSV file per table. */
+    export: "הורדת הנתונים",
+    exportHint: "קובץ CSV לכל טבלה. הקבצים כוללים פרטים אישיים של סטודנטים: שמור אותם במקום מוגן, ומחק אותם כשסיימת.",
+    exportTables: { students: "הורד את טבלת הסטודנטים", gifts: "הורד את טבלת המתנות", staff: "הורד את טבלת הצוות" },
     done: {
-      added: "הוספנו את העובד.",
+      added_worker: "הוספנו את העובד.",
       added_manager: "הוספנו את המנהל.",
-      promoted: "העובד הוא עכשיו מנהל.",
+      added_ceo: "הוספנו את המנכ\"ל.",
+      promoted_manager: "עדכנו את התפקיד למנהל.",
+      promoted_ceo: "עדכנו את התפקיד למנכ\"ל.",
       removed: "הסרנו את העובד.",
       stock: "שמרנו את המלאי.",
     },
     errors: {
       invalid: "הכתובת אינה כתובת דוא\"ל תקינה.",
       wrong_domain: "הכתובת אינה כתובת של האוניברסיטה או של האגודה.",
-      manager: "הכתובת הזו שייכת למנהל.",
-      exists: "העובד כבר ברשימה.",
+      higher: "לכתובת הזו כבר יש תפקיד גבוה יותר.",
+      exists: "הכתובת הזו כבר ברשימה, באותו תפקיד.",
       not_found: "העובד אינו ברשימה.",
       invalid_role: "התפקיד אינו תקין.",
+      forbidden_role: "רק מנכ\"ל יכול להוסיף מנכ\"ל.",
       invalid_stock: "הזן מספר שלם, 0 או יותר.",
       unknown_gift: "לא מצאנו את המתנה.",
       below_requested: "סטודנטים כבר בחרו במתנה הזו יותר פעמים מהמספר שהזנת. הזן לפחות",
@@ -577,7 +585,7 @@ ${history}
 
 export function staffPage(options: {
   email: string;
-  role: "manager" | "worker";
+  role: Role;
   stats: StaffStats;
   student?: StudentView | null;
   searched?: boolean;
@@ -605,7 +613,7 @@ export function staffPage(options: {
 
   return layout(
     `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
-${role === "manager" ? `<p><a href="/manager">${T.staff.manage}</a></p>` : ""}
+${role !== "worker" ? `<p><a href="/manager">${T.staff.manage}</a></p>` : ""}
 ${drift}
 <form method="post" action="/staff/lookup">
   <label>${T.staff.search}<input name="national_id" dir="ltr" inputmode="numeric" autofocus autocomplete="off"></label>
@@ -624,12 +632,25 @@ ${result}
 
 export function managerPage(options: {
   email: string;
-  staff: { email: string; role: "manager" | "worker" }[];
+  role: Role;
+  staff: { email: string; role: Role }[];
   gifts: GiftView[];
   message?: Notice;
 }): string {
-  const { email, staff, gifts, message } = options;
+  const { email, role, staff, gifts, message } = options;
   const M = T.manager;
+  // Only a ceo may give the ceo role (request 29), so only a ceo sees it in the list.
+  const roleOptions = (role === "ceo" ? (["worker", "manager", "ceo"] as const) : (["worker", "manager"] as const))
+    .map((r) => `<option value="${r}">${M.roles[r]}</option>`)
+    .join("");
+  const downloads = role === "ceo"
+    ? `<section><h2>${M.export}</h2>
+<p class="hint">${M.exportHint}</p>
+${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
+  .map((t) => `<a class="button secondary" href="/manager/export/${t}.csv" download>${M.exportTables[t]}</a>`)
+  .join("\n")}
+</section>`
+    : "";
 
   // Request 25: one list of all the staff, with each person's role. Only a worker has a
   // remove button; managers change from the command line.
@@ -666,14 +687,15 @@ ${notice(message)}
 <p class="hint">${M.managersHint}</p>
 <form method="post" action="/manager/staff/add">
   <label>${M.newStaff}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
-  <label>${M.role} <select name="role"><option value="worker">${M.roles.worker}</option><option value="manager">${M.roles.manager}</option></select></label>
+  <label>${M.role} <select name="role">${roleOptions}</select></label>
   <button class="button">${M.add}</button>
 </form>
 </section>
 <section><h2>${M.stock}</h2>
 <p class="hint">${M.stockHint}</p>
 <table><thead><tr>${M.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
-</section>`,
+</section>
+${downloads}`,
     true,
   );
 }

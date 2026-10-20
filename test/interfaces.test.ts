@@ -291,7 +291,7 @@ describe("manager page", () => {
   test("a manager adds a worker, and the worker can then log in", async () => {
     const cookies = await asManager();
     const res = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email: " New@Mail.HUJI.ac.il ", role: "worker" }) });
-    assert.equal(res.headers.location, "/manager?done=added");
+    assert.equal(res.headers.location, "/manager?done=added_worker");
     assert.equal(await notice(res.headers.location as string, cookies), "הוספנו את העובד.");
     assert.deepEqual(await workers(), ["dana@aguda.org.il", "new@mail.huji.ac.il"]);
     await login({ kind: "staff", email: "new@mail.huji.ac.il" });
@@ -303,7 +303,7 @@ describe("manager page", () => {
       ["not-an-email", "invalid"],
       ["x@gmail.com", "wrong_domain"],
       ["dana@aguda.org.il", "exists"],
-      ["BOSS@aguda.org.il", "manager"],
+      ["BOSS@aguda.org.il", "higher"],
     ]) {
       const res = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role: "worker" }) });
       assert.equal(res.headers.location, `/manager?error=${error}`, email);
@@ -331,13 +331,70 @@ describe("manager page", () => {
     const cookies = await asManager();
     const add = (email: string, role: string) =>
       app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role }) });
-    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?done=promoted");
-    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?error=manager");
-    assert.equal((await add("dana@aguda.org.il", "worker")).headers.location, "/manager?error=manager");
+    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?done=promoted_manager");
+    assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?error=exists");
+    assert.equal((await add("dana@aguda.org.il", "worker")).headers.location, "/manager?error=higher");
     assert.equal((await add("x@aguda.org.il", "admin")).headers.location, "/manager?error=invalid_role");
     assert.equal((await add("x@gmail.com", "manager")).headers.location, "/manager?error=wrong_domain");
     const roles = (await pool.query("SELECT email, role FROM staff ORDER BY email")).rows;
     assert.deepEqual(roles, [{ email: "boss@aguda.org.il", role: "manager" }, { email: "dana@aguda.org.il", role: "manager" }]);
+  });
+
+  test("a manager cannot give the ceo role, and sees neither it nor the downloads (request 29)", async () => {
+    const cookies = await asManager();
+    const res = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email: "boss@aguda.org.il", role: "ceo" }) });
+    assert.equal(res.headers.location, "/manager?error=forbidden_role");
+    assert.equal((await pool.query("SELECT role FROM staff WHERE email = 'boss@aguda.org.il'")).rows[0].role, "manager");
+    const page = (await app.inject({ url: "/manager", cookies })).body;
+    assert.doesNotMatch(page, /value="ceo"/);
+    assert.doesNotMatch(page, /\/manager\/export\//);
+    for (const who of [cookies, await asStaff()]) {
+      assert.equal((await app.inject({ url: "/manager/export/students.csv", cookies: who })).statusCode, 403);
+    }
+  });
+
+  test("a ceo has everything a manager has, gives the ceo role, and sees the downloads", async () => {
+    await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
+    const cookies = await login({ kind: "staff", email: "chief@aguda.org.il" });
+    assert.match((await app.inject({ url: "/staff", cookies })).body, /href="\/manager"/);
+    const page = (await app.inject({ url: "/manager", cookies })).body;
+    assert.match(page, /<option value="ceo">מנכ&quot;ל<\/option>|<option value="ceo">מנכ"ל<\/option>/);
+    for (const t of ["students", "gifts", "staff"]) assert.match(page, new RegExp(`href="/manager/export/${t}.csv" download`));
+
+    const add = await app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email: "boss@aguda.org.il", role: "ceo" }) });
+    assert.equal(add.headers.location, "/manager?done=promoted_ceo");
+    const stock = await app.inject({ method: "POST", url: "/manager/stock", cookies, ...form({ gift_id: "1", starting_inventory: "9" }) });
+    assert.equal(stock.headers.location, "/manager?done=stock");
+    // The manager list shows the highest role first.
+    assert.match((await app.inject({ url: "/manager", cookies })).body, /boss@aguda\.org\.il.*chief@aguda\.org\.il.*dana@aguda\.org\.il/s);
+  });
+
+  test("a ceo downloads each table as CSV that Excel reads, with no formula injection", async () => {
+    await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
+    await pool.query(`UPDATE students SET first_name = '=HYPERLINK("x")', last_name = 'כהן, "הגדול"' WHERE national_id = $1`, [ids[0]]);
+    const cookies = await login({ kind: "staff", email: "chief@aguda.org.il" });
+
+    const res = await app.inject({ url: "/manager/export/students.csv", cookies });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.headers["content-type"] as string, /^text\/csv; charset=utf-8/);
+    assert.match(res.headers["content-disposition"] as string, /^attachment; filename="aguda-students-\d{4}-\d{2}-\d{2}\.csv"$/);
+    assert.equal(res.headers["cache-control"], "no-store");
+    assert.ok(res.body.startsWith("\uFEFFnational_id,"), "BOM, then the header row");
+    const lines = res.body.trim().split("\r\n");
+    assert.equal(lines.length, 1 + 10, "a header and one line per student");
+    const row = lines.find((l) => l.startsWith(ids[0]))!;
+    assert.ok(row.includes(`"'=HYPERLINK(""x"")"`), "a formula is defused and quoted");
+    assert.ok(row.includes(`"כהן, ""הגדול"""`), "commas and quotes are escaped");
+    assert.match(row, /"\[""הר הצופים""\]"|"\[""[^"]+""\]"/, "a list is JSON in its cell");
+
+    for (const t of ["gifts", "staff"]) {
+      assert.equal((await app.inject({ url: `/manager/export/${t}.csv`, cookies })).statusCode, 200, t);
+    }
+    assert.equal((await app.inject({ url: "/manager/export/pg_shadow.csv", cookies })).statusCode, 404);
+  });
+
+  test("the database refuses a role outside the three", async () => {
+    await assert.rejects(pool.query("INSERT INTO staff (email, role) VALUES ('x@aguda.org.il', 'admin')"), /staff_role_check/);
   });
 
   test("the add form offers both roles, worker first", async () => {

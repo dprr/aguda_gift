@@ -30,6 +30,7 @@ bash /home/opc/aguda/app/deploy/server.sh stop
 bash /home/opc/aguda/app/deploy/server.sh start
 bash /home/opc/aguda/app/deploy/server.sh staff                          # list the staff
 bash /home/opc/aguda/app/deploy/server.sh staff manager someone@aguda.org.il
+bash /home/opc/aguda/app/deploy/server.sh staff ceo someone@aguda.org.il
 bash /home/opc/aguda/app/deploy/server.sh staff remove someone@aguda.org.il
 bash /home/opc/aguda/app/deploy/server.sh load-students /home/opc/aguda/students.json  # a saved university response
 bash /home/opc/aguda/app/deploy/server.sh psql -c "SELECT count(*) FROM students"
