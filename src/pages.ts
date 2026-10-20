@@ -235,57 +235,83 @@ function layout(body: string, wide = false): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
 <title>${T.title}</title>
 <style>
-  body { font-family: system-ui, "Segoe UI", Arial, sans-serif; background: #f4f5f7;
-         color: #1b1b1f; margin: 0; padding: 2rem 1rem; }
-  main { max-width: 28rem; margin-inline: auto; background: #fff; border-radius: 12px;
-         padding: 1.5rem; box-shadow: 0 1px 3px rgb(0 0 0 / 10%); }
+  /* Dark theme. Every color is here, so a change of theme edits only this block. */
+  :root {
+    color-scheme: dark;            /* dark form controls, checkboxes, and scrollbars */
+    --bg: #000;                    /* the page */
+    --surface: #121316;            /* the main panel */
+    --raised: #1b1c20;             /* inputs, photos, secondary buttons */
+    --border: #34363c;
+    --text: #fff;
+    --muted: #a1a1aa;              /* hints and labels */
+    --green: #1f5f3f;              /* buttons, as in the light theme */
+    --green-focus: #4ade80;
+    --link: #7cc4ff;
+    --link-visited: #c4a7ff;
+    --ok-bg: #0f2e1f;    --ok: #7ee2a8;
+    --warn-bg: #3a2a0a;  --warn: #ffc46b;
+    --error-bg: #3b1214; --error: #ff9b9b;
+    --dev: #ff6b6b;                /* the development login frame */
+  }
+  body { font-family: system-ui, "Segoe UI", Arial, sans-serif; background: var(--bg);
+         color: var(--text); margin: 0; padding: 2rem 1rem; }
+  main { max-width: 28rem; margin-inline: auto; background: var(--surface); border-radius: 12px;
+         padding: 1.5rem; border: 1px solid var(--border); }
+  a { color: var(--link); }
+  a:visited { color: var(--link-visited); }
+  :focus-visible { outline: 2px solid var(--green-focus); outline-offset: 2px; }
   h1 { margin-block-start: 0; font-size: 1.5rem; }
-  .button { display: block; text-align: center; background: #1f5f3f; color: #fff;
+  .button, .button:visited { display: block; text-align: center; background: var(--green); color: #fff;
             border: 0; border-radius: 8px; padding: 0.9rem; font: inherit;
             font-weight: 600; text-decoration: none; width: 100%; box-sizing: border-box;
             cursor: pointer; }
-  .hint { color: #5f6470; font-size: 0.9rem; }
-  .error { background: #fdeaea; color: #9c1f1f; border-radius: 8px; padding: 0.8rem;
+  .hint { color: var(--muted); font-size: 0.9rem; }
+  .error { background: var(--error-bg); color: var(--error); border-radius: 8px; padding: 0.8rem;
            font-weight: 600; }
-  fieldset { border: 1px dashed #c33; border-radius: 8px; margin-block-start: 2rem; }
-  legend { color: #c33; font-weight: 600; }
+  fieldset { border: 1px dashed var(--dev); border-radius: 8px; margin-block-start: 2rem; }
+  legend { color: var(--dev); font-weight: 600; }
+  input, select, textarea { background: var(--raised); color: var(--text);
+                            border: 1px solid var(--border); border-radius: 6px; }
   input { font: inherit; padding: 0.5rem; width: 100%; box-sizing: border-box;
           margin-block: 0.3rem 0.6rem; }
+  select { font: inherit; padding: 0.3rem; }
   main.wide { max-width: 46rem; }
-  .ok { background: #e9f5ee; color: #1f5f3f; border-radius: 8px; padding: 0.8rem;
+  .ok { background: var(--ok-bg); color: var(--ok); border-radius: 8px; padding: 0.8rem;
         font-weight: 600; }
-  .warn { background: #fdf3e5; color: #8a4b00; border-radius: 8px; padding: 0.8rem;
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 0.8rem;
           font-weight: 600; }
   .gifts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
            gap: 0.75rem; }
-  .gift { border: 2px solid #d6d8de; border-radius: 10px; padding: 0.9rem;
+  .gift { border: 2px solid var(--border); border-radius: 10px; padding: 0.9rem;
           display: flex; flex-direction: column; gap: 0.4rem; }
   .gift.out { opacity: 0.5; }
   .gift img, .photo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px;
-                      background: #f1f2f4; }
+                      background: var(--raised); }
   .photo { max-width: 16rem; display: block; }
   .gift strong { font-size: 1.1rem; }
   .big { font-size: 1.5rem; font-weight: 700; margin: 0.3rem 0; }
-  .button.disabled { background: #9aa0a6; cursor: default; }
-  .button.secondary { background: #fff; color: #1b1b1f; border: 1px solid #d6d8de;
-                      margin-block-start: 0.5rem; }
+  .button.disabled { background: #3f4247; color: var(--muted); cursor: default; }
+  .button.secondary, .button.secondary:visited { background: var(--raised); color: var(--text);
+                      border: 1px solid var(--border); margin-block-start: 0.5rem; }
   .bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
   .bar form .button { width: auto; padding: 0.4rem 0.9rem; }
   .button.small { width: auto; padding: 0.4rem 0.9rem; margin: 0; }
   form.inline { display: flex; gap: 0.5rem; align-items: center; }
   form.inline input { width: 6rem; margin: 0; }
-  .card { border: 1px solid #d6d8de; border-radius: 10px; padding: 1rem;
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 1rem;
           margin-block: 1rem; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; }
-  dt { color: #5f6470; }
+  dt { color: var(--muted); }
   dd { margin: 0; font-weight: 600; }
   table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-  th, td { border-block-end: 1px solid #e3e5ea; padding: 0.4rem; text-align: start; }
+  th, td { border-block-end: 1px solid var(--border); padding: 0.4rem; text-align: start; }
   section { margin-block-start: 1.5rem; }
-  fieldset.question { border: 1px solid #d6d8de; border-radius: 10px; margin-block-end: 1rem; }
-  fieldset.question legend { color: #1b1b1f; font-weight: 600; padding-inline: 0.3rem; }
+  fieldset.question { border: 1px solid var(--border); border-radius: 10px; margin-block-end: 1rem; }
+  fieldset.question legend { color: var(--text); font-weight: 600; padding-inline: 0.3rem; }
   .option { display: block; padding-block: 0.3rem; }
   .option input { width: auto; margin-inline-end: 0.4rem; }
   .option .follow { width: 60%; margin-block: 0; font: inherit; padding: 0.3rem; }
