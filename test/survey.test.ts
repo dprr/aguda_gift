@@ -174,38 +174,38 @@ describe("the live survey", () => {
   test('"אחר" requires its text, and the text is stored beside the choice', async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
     const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes", elections: "pirates" };
-    const missing = validate(LIVE, { ...base, fences: "other", fences_text: "  " });
+    const missing = validate(LIVE, { extra_open: "1", ...base, fences: "other", fences_text: "  " });
     assert.deepEqual(!missing.ok && missing.errors, { fences: "required" });
 
-    const given = validate(LIVE, { ...base, fences: "other", fences_text: " דעה אחרת " });
+    const given = validate(LIVE, { extra_open: "1", ...base, fences: "other", fences_text: " דעה אחרת " });
     assert.deepEqual(given, { ok: true, answers: { fences: ["other"], fences_text: "דעה אחרת", ...base } });
 
     // The text of an option that was not chosen is dropped.
-    const ignored = validate(LIVE, { ...base, fences: "disaster", fences_text: "leftover" });
+    const ignored = validate(LIVE, { extra_open: "1", ...base, fences: "disaster", fences_text: "leftover" });
     assert.deepEqual(ignored, { ok: true, answers: { fences: ["disaster"], ...base } });
   });
 
   test("fences takes several answers, is optional, and \"אחר\" still needs its text", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
     const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes", elections: "pirates" };
-    const two = validate(LIVE, { ...base, fences: ["disaster", "technion"] });
+    const two = validate(LIVE, { extra_open: "1", ...base, fences: ["disaster", "technion"] });
     assert.ok(two.ok && JSON.stringify(two.answers.fences) === '["disaster","technion"]');
     const none = validate(LIVE, { ...base });
     assert.ok(none.ok && !("fences" in none.answers), "an extra question may stay empty");
-    const otherEmpty = validate(LIVE, { ...base, fences: ["disaster", "other"], fences_text: "" });
+    const otherEmpty = validate(LIVE, { extra_open: "1", ...base, fences: ["disaster", "other"], fences_text: "" });
     assert.deepEqual(!otherEmpty.ok && otherEmpty.errors, { fences: "required" });
-    const otherGiven = validate(LIVE, { ...base, fences: ["disaster", "other"], fences_text: "גדר" });
+    const otherGiven = validate(LIVE, { extra_open: "1", ...base, fences: ["disaster", "other"], fences_text: "גדר" });
     assert.ok(otherGiven.ok && otherGiven.answers.fences_text === "גדר");
   });
 
   test("the elections question is an optional dropdown with the two owner's options", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
     const base = { fences: "disaster", father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes" };
-    const empty = validate(LIVE, { ...base, elections: "" });
+    const empty = validate(LIVE, { extra_open: "1", ...base, elections: "" });
     assert.ok(empty.ok && !("elections" in empty.answers));
-    const fake = validate(LIVE, { ...base, elections: "likud" });
+    const fake = validate(LIVE, { extra_open: "1", ...base, elections: "likud" });
     assert.deepEqual(!fake.ok && fake.errors, { elections: "invalid" });
-    const ok = validate(LIVE, { ...base, elections: "throw_away" });
+    const ok = validate(LIVE, { extra_open: "1", ...base, elections: "throw_away" });
     assert.ok(ok.ok && ok.answers.elections === "throw_away");
   });
 
@@ -240,7 +240,7 @@ describe("the live survey", () => {
   });
 });
 
-describe("extra questions (version 6)", () => {
+describe("extra questions", () => {
   const EXTRA = ["fences", "father", "welfare", "elections"];
 
   test("the four are optional and marked extra; every other question keeps its rule", async () => {
@@ -265,10 +265,10 @@ describe("extra questions (version 6)", () => {
       : (await live.inject({ method: "POST", url: "/student/survey", cookies, ...form(body) })).body;
   };
 
-  test("they come last, inside the hidden section, after an unchecked, unnamed checkbox", async () => {
+  test("they come last, inside the hidden section, after an unchecked checkbox", async () => {
     const html = await page(ids[0]);
-    const toggle = html.indexOf('class="option extra-toggle"><input type="checkbox">');
-    assert.ok(toggle > 0, "the checkbox starts unchecked and has no name");
+    const toggle = html.indexOf('class="option extra-toggle"><input type="checkbox" name="extra_open" value="1" onchange=');
+    assert.ok(toggle > 0, "the checkbox starts unchecked, and clears the answers when unchecked");
     assert.ok(html.indexOf('name="more"') < toggle, "after every other question");
     const section = html.slice(html.indexOf('<div class="extra">'));
     for (const id of EXTRA) assert.ok(section.includes(`name="${id}"`), id);
@@ -276,14 +276,30 @@ describe("extra questions (version 6)", () => {
     assert.doesNotMatch(section.slice(0, section.indexOf("</div>\n<button")), /\(חובה\)/, "no extra question is marked required");
   });
 
+  test("with the box unchecked, extra answers the browser still sends are not stored", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const required = { dorms: "no", reserve: "no", special: "no", social: "no" };
+    const sent = { ...required, fences: ["other"], fences_text: "", father: "no", welfare: "yes", elections: "pirates" };
+    const closed = validate(LIVE, sent);
+    assert.ok(closed.ok, "an invalid hidden answer is no error either");
+    assert.deepEqual(Object.keys(closed.answers).sort(), Object.keys(required).sort());
+    const open = validate(LIVE, { ...sent, extra_open: "1", fences_text: "גדר" });
+    assert.ok(open.ok && open.answers.father === "no" && open.answers.elections === "pirates");
+
+    await page(ids[0], new URLSearchParams({ ...required, father: "no", elections: "pirates" }).toString());
+    const stored = (await pool.query("SELECT survey FROM students WHERE national_id = $1", [ids[0]])).rows[0].survey;
+    assert.equal(stored.version, 1);
+    assert.ok(!("father" in stored.answers) && !("elections" in stored.answers));
+  });
+
   test("an error in an extra question opens the section, so the student sees it", async () => {
-    const html = await page(ids[0], "dorms=no&reserve=no&special=no&social=no&fences=other&fences_text=");
-    assert.match(html, /class="option extra-toggle"><input type="checkbox" checked>/);
+    const html = await page(ids[0], "dorms=no&reserve=no&special=no&social=no&extra_open=1&fences=other&fences_text=");
+    assert.match(html, /class="option extra-toggle"><input type="checkbox" name="extra_open" value="1" checked/);
     assert.match(html, /class="error"/);
   });
 });
 
-describe("the five questions of version 3", () => {
+describe("dorms, special population, social, and more", () => {
   const base = { fences: "disaster", father: "no", welfare: "no", reserve: "yes", special: "no", social: "no", elections: "pirates" };
 
   test("a dorm is required after כן, must be a real dorm, and is dropped after לא", async () => {

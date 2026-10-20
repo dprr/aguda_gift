@@ -20,7 +20,7 @@ type Base = {
   required: boolean;
   /**
    * An optional question, shown last, inside a section the student opens with a checkbox
-   * (owner's decision, version 6).
+   * (owner's decision). Its answers count only while that checkbox is checked.
    */
   extra?: boolean;
 };
@@ -93,17 +93,11 @@ const YES_NO: Option[] = [
 ];
 
 /**
- * The live survey, as supplied by the owner on 2026-10-11.
- * Version 2: singular, gendered wording instead of אתם, and the spelling ליהנות.
- * Version 3: five more questions.
- * Version 4: fences takes several answers; the elections question, as a dropdown.
- * Version 5: special population is a dropdown; כן opens checkboxes of the university's
- * categories instead of a text box.
- * Version 6: fences, father, welfare, and elections are optional extra questions, shown
- * last, behind a checkbox.
+ * The live survey. Version 1: the owner reset the version, and deleted every earlier answer,
+ * on 2026-10-20.
  */
 export const SURVEY: Survey = {
-  version: 6,
+  version: 1,
   questions: [
     {
       id: "fences",
@@ -236,6 +230,9 @@ export const followKey = (questionId: string, follow: NonNullable<Option["follow
   `${questionId}_${{ text: "text", select: "choice", multi: "choices" }[follow.kind]}`;
 
 export type Answers = Record<string, string | string[]>;
+
+/** The form field of the checkbox that opens the extra questions. */
+export const EXTRA_FIELD = "extra_open";
 const MAX_TEXT = 1000;
 
 /**
@@ -248,8 +245,12 @@ export function validate(
 ): { ok: true; answers: Answers } | { ok: false; errors: Record<string, "required" | "invalid"> } {
   const answers: Answers = {};
   const errors: Record<string, "required" | "invalid"> = {};
+  // The extra questions count only while their checkbox is checked (EXTRA_FIELD). With it
+  // unchecked, anything the browser still sends for them is ignored.
+  const extraOpen = body[EXTRA_FIELD] === "1";
 
   for (const q of survey.questions) {
+    if (q.extra && !extraOpen) continue;
     const raw = body[q.id];
     if (q.kind === "text") {
       const value = typeof raw === "string" ? raw.trim() : "";

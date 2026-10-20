@@ -6,7 +6,7 @@
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
 import type { Role } from "./staff.ts";
-import { AGUDA_SOCIAL, CAMPUS_SOCIAL, campusLabel, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
+import { AGUDA_SOCIAL, CAMPUS_SOCIAL, campusLabel, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -553,16 +553,19 @@ export function surveyPage(
     return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${links(q)}${error}${input}</fieldset>`;
   };
 
-  // The extra questions come last, inside a section a checkbox opens. CSS only, no
-  // JavaScript. The checkbox has no name, so it is never submitted. It starts checked when
-  // the student already answered an extra question, or one has an error, so nothing the
-  // student must see stays hidden.
+  // The extra questions come last, inside a section a checkbox opens; CSS shows and hides
+  // it. Unchecking clears every extra answer: the small script does it on the page, and
+  // validate() ignores extra answers sent while the box is unchecked, so a browser without
+  // JavaScript stores nothing either. The box starts checked when the student already
+  // answered an extra question, or one has an error, so nothing the student must see stays
+  // hidden.
   const main = survey.questions.filter((q) => !q.extra);
   const extra = survey.questions.filter((q) => q.extra);
   const answered = (q: Question) =>
-    state.errors?.[q.id] !== undefined || (values[q.id] !== undefined && values[q.id] !== "");
+    values[EXTRA_FIELD] === "1" &&
+    (state.errors?.[q.id] !== undefined || (values[q.id] !== undefined && values[q.id] !== ""));
   const extraSection = extra.length
-    ? `<label class="option extra-toggle"><input type="checkbox"${extra.some(answered) ? " checked" : ""}> ${female ? T.survey.extraFemale : T.survey.extra} <span class="hint">(${T.survey.optional})</span></label>
+    ? `<label class="option extra-toggle"><input type="checkbox" name="${EXTRA_FIELD}" value="1"${extra.some(answered) ? " checked" : ""} onchange="if (!this.checked) for (const e of this.form.querySelectorAll('.extra input, .extra select, .extra textarea')) { if (e.type === 'checkbox' || e.type === 'radio') e.checked = false; else if (e.tagName === 'SELECT') e.selectedIndex = 0; else e.value = ''; }"> ${female ? T.survey.extraFemale : T.survey.extra} <span class="hint">(${T.survey.optional})</span></label>
 <div class="extra">
 ${extra.map(field).join("\n")}
 </div>`
