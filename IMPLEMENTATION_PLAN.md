@@ -32,7 +32,7 @@ the later section is wrong.
 |---|---|---|
 | Language | TypeScript, backend and frontend | One language for the whole system. The frontend is TypeScript either way |
 | Backend | Fastify | `app.inject()` tests concurrency in-process |
-| Frontend | **Server-rendered HTML. No React, no Vite, no build step** | The screens are a list of four gifts and one search box. React would add a build, a second `package.json`, a JSON API, and a second copy of the page logic (§0) |
+| Frontend | **Server-rendered HTML. No React, no Vite, no build step** | The screens are a list of five gifts and one search box. React would add a build, a second `package.json`, a JSON API, and a second copy of the page logic (§0) |
 | Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are four small tables. An ORM would earn nothing (§0) |
 | Database | PostgreSQL on RDS | Same price as a container once the instance is sized honestly, and it adds point-in-time recovery |
 | **Tables** | **4: `students`, `gifts`, `staff`, and `settings`** | §0. `staff` serves requests 24 and 25; `settings` serves request 33. Everything else serves no line in §14 |
@@ -239,14 +239,14 @@ cannot disagree.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | integer, primary key, 1 to 4 | |
+| `id` | integer, primary key, 1 to 5 | |
 | `name` | text, Hebrew | |
 | `description` | text, Hebrew | |
 | `starting_inventory` | integer, not null | Request 16. Set at seed time. A manager changes it on `/manager` (request 24) |
 | `requested_count` | integer, not null, default 0 | Request 16. Rises on each student selection |
 | `given_count` | integer, not null, default 0 | Request 16. Rises on each handover |
 
-Four rows. The seed inserts a gift if its `id` is absent, and otherwise updates only the
+Five rows (request 36). The seed inserts a gift if its `id` is absent, and otherwise updates only the
 name, the description, and the photo. A restart never resets a counter or the stock.
 
 **A manager sets the stock** (request 24) with one guarded write:
@@ -602,7 +602,7 @@ gift out twice.
 **M3 — Login.** One page, Google, the `hd` routing, sessions.
 
 **M4 — The two interfaces.** Server-rendered Hebrew right-to-left pages. Student: log in,
-see membership, select one of four gifts through a confirm step, see a sold-out gift greyed
+see membership, select one of five gifts through a confirm step, see a sold-out gift greyed
 out, see the locked selection. Staff: search by national ID through a POST, see the gift
 and the status, mark it as taken, see the stock, and any
 counter drift.
@@ -731,7 +731,7 @@ document is a wish list, and a section in it is not a request.
 | # | Request |
 |---|---|
 | 1 | A student logs in. The site says whether the student is a member |
-| 2 | A member selects one of **4** gifts |
+| 2 | A member selects one of the gifts: **5** since request 36 |
 | 3 | The student selection is final. The student cannot change it |
 | 4 | An employee searches by ID and sees the selected gift and whether it was taken |
 | 5 | An employee marks the gift as taken, so it is not given twice |
@@ -752,7 +752,7 @@ document is a wish list, and a section in it is not a request.
 | 20 | A student must be a member at selection **and** at collection. A lapsed member is refused at the desk, and the unit stays held |
 | 21 | Hebrew text uses no gendered new-speak. Text about one known student follows `students.gender`; masculine only when the gender is unknown |
 | 22 | Every student, member or not, submits a survey before selecting a gift. Submitted is final: no editing, and no re-asking when questions are added later |
-| 23 | The 4 gifts are the backpack, the thermal cup, the laptop stand, and the lunch bag, each shown with its photo from `img/` |
+| 23 | The gifts are the backpack, the thermal cup, the laptop stand, and the lunch bag, each shown with its photo from `img/` |
 | 24 | Two login pages: students (the default) and staff. Staff are managers or workers, with a `mail.huji.ac.il` or an `aguda.org.il` account. Managers add and remove workers, and edit the gift stock. All students have `mail.huji.ac.il` accounts |
 | 25 | One `staff` table lists every employee, and marks each one as a manager or a worker |
 | 26 | After the survey and the selection, the student can mark the gift as received. This does exactly what the desk's "mark as taken" does |
@@ -765,6 +765,7 @@ document is a wish list, and a section in it is not a request.
 | 33 | A switch on the מנכ"ל's manager page turns the survey's extra questions on or off. Off: students cannot see them |
 | 34 | A staff member of any role who enters a wrong national ID at the desk 5 times in a row is removed from the staff. ~~owner@example.org gets an email naming them~~: replaced by request 35 |
 | 35 | Instead of email, every מנכ"ל sees an alert on the manager page naming the removed staff member, until cleared |
+| 36 | A fifth gift, the lunch box (קופסת אוכל), and smaller photos for all gifts |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

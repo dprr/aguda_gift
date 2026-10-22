@@ -459,7 +459,7 @@ ${s.member === true ? `<a class="button secondary" href="/student/received">${f 
     return layout(`${head}<p class="warn">${text}</p>`);
   }
 
-  // A member with no selection: the four gifts. A sold-out gift cannot be chosen (request 19).
+  // A member with no selection: the gifts. A sold-out gift cannot be chosen (request 19).
   const cards = gifts
     .map((g) =>
       g.selectable > 0
