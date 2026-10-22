@@ -10,6 +10,7 @@
  * without them. It is stored as given; the desk search drops leading zeros too.
  */
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { SourceStudent, StudentSource } from "./source.ts";
 
 /** One record, as the service sends it. Only the fields this app reads are typed. */
@@ -20,7 +21,6 @@ export type UniversityRecord = {
   sex: string | null;
   hujiEmail: string | null;
   mobile: string | null;
-  campousNameList: string | null;
   specialPopulationsList: string | null;
   motherFacultyCode: string | null;
   motherFacultyName: string | null;
@@ -38,11 +38,50 @@ const clean = (value: string | null | undefined) => (value ?? "").trim() || null
 const personal = (r: UniversityRecord) =>
   JSON.stringify([
     clean(r.fName), clean(r.lName), clean(r.sex), clean(r.hujiEmail)?.toLowerCase() ?? null,
-    clean(r.mobile), clean(r.specialPopulationsList), campuses(r),
+    clean(r.mobile), clean(r.specialPopulationsList),
   ]);
 
-const campuses = (r: UniversityRecord) =>
-  [...new Set((r.campousNameList ?? "").split(",").map((c) => c.trim()).filter(Boolean))].sort();
+/**
+ * Request 38. The owner's map from faculty to campus, in faculty-campus.csv at the
+ * repository root. A student's campuses are the campuses of the faculties of their
+ * records. The university's own campus field (campousNameList) is ignored.
+ */
+export type FacultyCampus = Map<string, string>;
+export const FACULTY_CAMPUS_PATH = join(import.meta.dirname, "..", "faculty-campus.csv");
+
+/** Reads the map: a header row, then faculty,campus. Quoted CSV fields are allowed. */
+export async function loadFacultyCampus(path = FACULTY_CAMPUS_PATH): Promise<FacultyCampus> {
+  const text = (await readFile(path, "utf8")).replace(/^\uFEFF/, "");
+  const rows: string[][] = [[]];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") { rows[rows.length - 1].push(field); field = ""; }
+    else if (c === "\n") { rows[rows.length - 1].push(field); field = ""; rows.push([]); }
+    else if (c !== "\r") field += c;
+  }
+  rows[rows.length - 1].push(field);
+  const map: FacultyCampus = new Map();
+  for (const [faculty = "", campus = ""] of rows.slice(1)) {
+    if (faculty.trim() && campus.trim()) map.set(faculty.trim(), campus.trim());
+  }
+  return map;
+}
+
+const campusesOf = (rs: UniversityRecord[], facultyCampus: FacultyCampus) =>
+  [...new Set(rs.map((r) => facultyCampus.get((r.faculty ?? "").trim())).filter((c): c is string => !!c))].sort();
+
+/** Faculties in the students' records that the map does not know, so they got no campus. */
+export function unmappedFaculties(students: SourceStudent[], facultyCampus: FacultyCampus): string[] {
+  const faculties = students.flatMap((s) => s.programs.map((p) => String(p.faculty ?? "").trim()));
+  return [...new Set(faculties.filter((f) => !facultyCampus.has(f)))].sort();
+}
 
 /** The academic fields of one record, as the university names them. */
 const program = (r: UniversityRecord) => ({
@@ -57,7 +96,7 @@ const program = (r: UniversityRecord) => ({
 });
 
 /** Merge the service's records into one SourceStudent per national ID. */
-export function parseUniversity(records: UniversityRecord[]): SourceStudent[] {
+export function parseUniversity(records: UniversityRecord[], facultyCampus: FacultyCampus = new Map()): SourceStudent[] {
   if (!Array.isArray(records)) throw new Error("the university response is not a list");
   const byId = new Map<string, UniversityRecord[]>();
   for (const r of records) {
@@ -81,7 +120,7 @@ export function parseUniversity(records: UniversityRecord[]): SourceStudent[] {
       gender: clean(r.sex),
       phone: clean(r.mobile),
       special_population: clean(r.specialPopulationsList),
-      campuses: campuses(r),
+      campuses: campusesOf(rs, facultyCampus),
       // Sorted, so the same records in another order are not a change.
       programs: rs.map(program).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
     };
@@ -116,7 +155,8 @@ export class UniversitySource implements StudentSource {
   }
   async fetchStudents(): Promise<SourceStudent[]> {
     const url = `${this.options.url ?? UNIVERSITY_URL}?CurrentYear=${this.options.year}`;
-    return parseUniversity((await this.fetchJson(url, this.options.key)) as UniversityRecord[]);
+    // The map is read at each run, so an edit to the CSV applies at the next sync.
+    return parseUniversity((await this.fetchJson(url, this.options.key)) as UniversityRecord[], await loadFacultyCampus());
   }
 }
 
@@ -133,7 +173,7 @@ export class UniversityFileSource implements StudentSource {
     this.path = path;
   }
   async fetchStudents(): Promise<SourceStudent[]> {
-    return parseUniversity(JSON.parse(await readFile(this.path, "utf8")));
+    return parseUniversity(JSON.parse(await readFile(this.path, "utf8")), await loadFacultyCampus());
   }
 }
 
@@ -152,7 +192,10 @@ if (import.meta.main) {
   const source = new UniversityFileSource(path);
   const result = await syncStudents(source, { minStudents: Number(process.env.SYNC_MIN_STUDENTS ?? 0) });
   console.error(JSON.stringify(result));
-  const problems = problemStudents(await source.fetchStudents());
+  const students = await source.fetchStudents();
+  const unmapped = unmappedFaculties(students, await loadFacultyCampus());
+  if (unmapped.length) console.error(`faculties missing from faculty-campus.csv, so no campus: ${unmapped.join(" | ")}`);
+  const problems = problemStudents(students);
   console.error(`${problems.length} students cannot log in with Google (listed on stdout)`);
   for (const p of problems) console.log(`${p.national_id}\t${p.problem}\t${p.email ?? ""}`);
   await pool.end();

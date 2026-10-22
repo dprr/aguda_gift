@@ -6,7 +6,7 @@
  */
 import type { GiftView, StaffStats, StudentView } from "./queries.ts";
 import { mayManage, type Role } from "./staff.ts";
-import { AGUDA_SOCIAL, CAMPUS_SOCIAL, campusLabel, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
+import { AGUDA_SOCIAL, CAMPUS_SOCIAL, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -536,7 +536,7 @@ export function surveyPage(
     for (const name of s.campuses) {
       const c = CAMPUS_SOCIAL[name];
       if (!c) continue;
-      const campus = esc(campusLabel(name));
+      const campus = esc(name);
       out += line([
         c.instagram && a(c.instagram, `${T.survey.instagram} ${campus}`),
         c.whatsapp

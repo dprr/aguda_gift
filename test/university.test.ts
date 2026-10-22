@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import { pool } from "../src/db.ts";
 import { syncStudents } from "../src/sync.ts";
-import { parseUniversity, problemStudents, type UniversityRecord, UniversitySource } from "../src/university.ts";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  type FacultyCampus, loadFacultyCampus, parseUniversity, problemStudents, unmappedFaculties, type UniversityRecord, UniversitySource,
+} from "../src/university.ts";
 import { freshDatabase, student } from "./helpers.ts";
 
 beforeEach(() => freshDatabase());
@@ -17,7 +22,6 @@ const record = (over: Partial<UniversityRecord> = {}): UniversityRecord => ({
   sex: "Female",
   hujiEmail: "Dana.Cohen@mail.huji.ac.il",
   mobile: "0500000000",
-  campousNameList: "אדמונד י' ספרא,הר הצופים",
   specialPopulationsList: "לא אוכלוסייה מיוחדת",
   motherFacultyCode: "002",
   motherFacultyName: "פקולטה למתמטיקה ולמדעי הטבע",
@@ -30,13 +34,18 @@ const record = (over: Partial<UniversityRecord> = {}): UniversityRecord => ({
   ...over,
 });
 
-test("one record becomes one student, cleaned, with sorted campuses", () => {
-  const [s] = parseUniversity([record()]);
+const MAP: FacultyCampus = new Map([
+  ["פקולטה למתמטיקה ולמדעי הטבע", "גבעת רם"],
+  ['ביה"ס לתלמידי חו"ל', "הר הצופים"],
+]);
+
+test("one record becomes one student, cleaned, with the campus of its faculty", () => {
+  const [s] = parseUniversity([record()], MAP);
   assert.equal(s.national_id, "123456782");
   assert.equal(s.university_email, "dana.cohen@mail.huji.ac.il");
   assert.equal(s.last_name, "כהן", "trimmed");
   assert.equal(s.gender, "Female");
-  assert.deepEqual(s.campuses, ["אדמונד י' ספרא", "הר הצופים"]);
+  assert.deepEqual(s.campuses, ["גבעת רם"], "from the map, not from the university's campus field");
   assert.equal(s.programs.length, 1);
   assert.equal(s.programs[0].learningProgramName, "בוגר");
 });
@@ -44,12 +53,36 @@ test("one record becomes one student, cleaned, with sorted campuses", () => {
 test("records of one student with the same details merge, keeping every program", () => {
   const students = parseUniversity([
     record(),
-    record({ faculty: "ביה\"ס לתלמידי חו\"ל", facultyCode: "020", campousNameList: "הר הצופים,אדמונד י' ספרא" }),
+    record({ faculty: "ביה\"ס לתלמידי חו\"ל", facultyCode: "020" }),
     record({ identityNumber: 111111118, hujiEmail: "other@mail.huji.ac.il" }),
   ]);
   assert.equal(students.length, 2);
   const merged = students.find((s) => s.national_id === "123456782")!;
   assert.deepEqual(merged.programs.map((p) => p.facultyCode).sort(), ["002", "020"]);
+});
+
+test("two faculties on two campuses give two campuses; an unknown faculty gives none", () => {
+  const students = parseUniversity([
+    record(),
+    record({ faculty: 'ביה"ס לתלמידי חו"ל ' }), // the university's trailing space is ignored
+    record({ identityNumber: 2, hujiEmail: "x@mail.huji.ac.il", faculty: "פקולטה חדשה" }),
+  ], MAP);
+  assert.deepEqual(students.find((s) => s.national_id === "123456782")!.campuses, ["גבעת רם", "הר הצופים"]);
+  assert.deepEqual(students.find((s) => s.national_id === "2")!.campuses, []);
+  assert.deepEqual(unmappedFaculties(students, MAP), ["פקולטה חדשה"]);
+});
+
+test("the CSV map is read with quotes, a BOM, and Windows line ends", async () => {
+  const path = join(tmpdir(), `faculty-campus-${process.pid}.csv`);
+  writeFileSync(path, '\uFEFFפקולטה,קמפוס\r\n"ביה""ס לרפואה",עין כרם\r\n"פקולטה לחקלאות, מזון",רחובות\r\nריקה,\r\n');
+  const map = await loadFacultyCampus(path);
+  assert.deepEqual([...map], [['ביה"ס לרפואה', "עין כרם"], ["פקולטה לחקלאות, מזון", "רחובות"]]);
+});
+
+test("the real faculty-campus.csv maps every faculty to one of the four campuses", async () => {
+  const map = await loadFacultyCampus();
+  assert.ok(map.size >= 20);
+  for (const campus of map.values()) assert.ok(["גבעת רם", "הר הצופים", "עין כרם", "רחובות"].includes(campus), campus);
 });
 
 test("records of one ID with different personal details refuse the whole response", () => {
@@ -62,7 +95,7 @@ test("an ID with leading zeros arrives as a number, and is stored as given", () 
 });
 
 test("empty fields become null or an empty list", () => {
-  const [s] = parseUniversity([record({ hujiEmail: null, mobile: "", campousNameList: null, roadMaps: null })]);
+  const [s] = parseUniversity([record({ hujiEmail: null, mobile: "", faculty: null, roadMaps: null })], MAP);
   assert.equal(s.university_email, null);
   assert.equal(s.phone, null);
   assert.deepEqual(s.campuses, []);

@@ -1,7 +1,7 @@
 -- Request 27. The real university list (orbitapi.huji.ac.il, AgudaStudents). A student
 -- can study at several campuses, and in several programs, each with several tracks. So:
 --
---   campuses  the university's campus names, sorted, for example {"הר הצופים","רחובות"}
+--   campuses  the campuses of the student's faculties, from faculty-campus.csv (request 38)
 --   programs  one entry per university record of the student, with the university's own
 --             academic fields (faculty, program, year, roadMaps), sorted
 --

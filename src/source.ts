@@ -16,7 +16,7 @@ export type SourceStudent = {
   gender: string | null;
   phone: string | null;
   special_population: string | null;
-  /** The university's campus names, sorted. */
+  /** The campuses of the student's faculties, from faculty-campus.csv (request 38), sorted. */
   campuses: string[];
   /** One entry per university record, with its academic fields as the university names them. */
   programs: Record<string, unknown>[];
@@ -50,7 +50,7 @@ const FACULTIES = [
   { faculty: "מדעי הרוח", campus: "הר הצופים" },
   { faculty: "מדעי החברה", campus: "הר הצופים" },
   { faculty: "משפטים", campus: "הר הצופים" },
-  { faculty: "מתמטיקה ומדעי הטבע", campus: "אדמונד י' ספרא" },
+  { faculty: "מתמטיקה ומדעי הטבע", campus: "גבעת רם" },
   { faculty: "רפואה", campus: "עין כרם" },
   { faculty: "חקלאות, מזון וסביבה", campus: "רחובות" },
 ];

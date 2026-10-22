@@ -144,7 +144,7 @@ One row per student. Current values in columns, two append-only arrays beside th
 | `phone` | text, nullable | טלפון |
 | **University data — request 27** | | |
 | `special_population` | text, nullable | `specialPopulationsList`, as given. Used for special services |
-| `campuses` | text[] | `campousNameList`, split and sorted. A student can study at several campuses |
+| `campuses` | text[] | Request 38: the campuses of the student's faculties, through `faculty-campus.csv`, sorted. The university's `campousNameList` is ignored |
 | `programs` | jsonb, default `'[]'` | One entry per university record of the student: faculty, mother faculty, academic year, program, and the `roadMaps` (tracks), with the university's own field names |
 | **State** | | |
 | `member` | boolean, **nullable** | Request 27: `true` while the student is on the university list, `false` once absent |
@@ -176,8 +176,12 @@ personal details differ, the whole response is refused.
 them. It is stored as given, and the desk search drops leading zeros from what the
 employee types, so both spellings find the student.
 
-**Campus names are the university's.** The app shows `אדמונד י' ספרא` as `גבעת רם`, the
-name students use (`campusLabel()` in `src/survey.ts`).
+**Campuses come from the owner's faculty map (request 38).** `faculty-campus.csv` at the
+repository root maps each faculty to one campus: גבעת רם, הר הצופים, עין כרם, or רחובות.
+A student's campuses are the campuses of all the faculties in their records, so a student
+in 2 faculties on 2 campuses has 2. The loader reads the file at every sync, and reports
+any faculty the file lacks; that faculty gives no campus. In the 2027 list, 13,747
+students have 1 campus, 815 have 2, and 2 have 3.
 
 The sync writes these columns, and §5.3 updates only the ones whose value differs.
 
@@ -767,6 +771,7 @@ document is a wish list, and a section in it is not a request.
 | 35 | Instead of email, every מנכ"ל sees an alert on the manager page naming the removed staff member, until cleared |
 | 36 | A fifth gift, the lunch box (קופסת אוכל), and smaller photos for all gifts |
 | 37 | A student who is not a member answers the survey, then sees how to register (`img/how_to_register.jpg`) instead of the gifts |
+| 38 | A student's campus comes from the faculty, through the owner's `faculty-campus.csv`, not from the university's campus field |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
