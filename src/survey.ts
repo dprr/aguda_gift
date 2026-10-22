@@ -68,7 +68,7 @@ const DORMS = [
 ];
 
 /**
- * The special populations of the university list (specialPopulationsList), as of the 2026
+ * The special populations of the university list (specialPopulationsList), as of the 2027
  * list. The university writes them with gendered slash forms, which this project never
  * uses, so each has a masculine label and a feminine one.
  */

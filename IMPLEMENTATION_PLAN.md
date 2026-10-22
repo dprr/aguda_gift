@@ -167,8 +167,8 @@ Request 27 replaced the guessed §4.2 columns with the shape of the real service
 | `email` (personal) | The HUJI address is the only one used. The owner removed extra emails |
 | `campousCodesList` | `campuses` holds the names, which the code list only repeats |
 
-**The service sends one record per faculty or program,** so 4,553 of 15,294 students
-arrived 2 to 5 times. `src/university.ts` merges the records of one national ID when the
+**The service sends one record per faculty or program,** so 4,331 of 14,564 students
+in the 2027 list arrived more than once. `src/university.ts` merges the records of one national ID when the
 personal details match, and keeps every record's academic fields in `programs`. If the
 personal details differ, the whole response is refused.
 
@@ -707,8 +707,8 @@ then deferred. An item moves §13 → §15 → §14, and nothing gets built unti
 | Case | What happens now | What it would need |
 |---|---|---|
 | A student from an international program has no תעודת זהות | Whatever the university sends is stored. The column is text with no validator | Nothing, unless the value is absent |
-| A student has no HUJI email, or an email outside `mail.huji.ac.il` (40 students in the 2026 list) | Stored as given. The student cannot log in with Google. `load-students` lists them | The owner decides later |
-| Two records of one national ID with different personal details | The whole response is refused. None in the 2026 list | A rule for which record wins |
+| A student has no HUJI email, or an email outside `mail.huji.ac.il` (35 students in the 2027 list) | Stored as given. The student cannot log in with Google. `load-students` lists them | The owner decides later |
+| Two records of one national ID with different personal details | The whole response is refused. None in the 2027 list | A rule for which record wins |
 | A student studies two programs at once | The second overwrites the first | A `student_programs` table |
 | A report must query the arrays across students | `membership_history` and `interactions` need `jsonb_array_elements`, and no index helps | Move the array into its own table with typed columns |
 | A student wants a different gift after choosing | Any staff member deletes the selection (request 30), and the student selects again. Not after the handout | §15.1, if staff should pick the new gift themselves |
