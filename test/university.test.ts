@@ -61,14 +61,33 @@ test("records of one student with the same details merge, keeping every program"
   assert.deepEqual(merged.programs.map((p) => p.facultyCode).sort(), ["002", "020"]);
 });
 
-test("two faculties on two campuses give two campuses; an unknown faculty gives none", () => {
-  const students = parseUniversity([
-    record(),
-    record({ faculty: 'ביה"ס לתלמידי חו"ל ' }), // the university's trailing space is ignored
-    record({ identityNumber: 2, hujiEmail: "x@mail.huji.ac.il", faculty: "פקולטה חדשה" }),
+test("the mother faculties count; records without one add nothing (request 39)", () => {
+  const [s] = parseUniversity([
+    record(), // mother: מתמטיקה → גבעת רם
+    record({ faculty: 'ביה"ס לתלמידי חו"ל', motherFacultyName: null }), // no mother: ignored
   ], MAP);
-  assert.deepEqual(students.find((s) => s.national_id === "123456782")!.campuses, ["גבעת רם", "הר הצופים"]);
-  assert.deepEqual(students.find((s) => s.national_id === "2")!.campuses, []);
+  assert.deepEqual(s.campuses, ["גבעת רם"]);
+});
+
+test("two mother faculties on two campuses give two campuses", () => {
+  const [s] = parseUniversity([
+    record(),
+    record({ faculty: 'ביה"ס לתלמידי חו"ל', motherFacultyName: 'ביה"ס לתלמידי חו"ל ' }), // trailing space ignored
+  ], MAP);
+  assert.deepEqual(s.campuses, ["גבעת רם", "הר הצופים"]);
+});
+
+test("with no mother faculty in any record, every record's faculty counts", () => {
+  const [s] = parseUniversity([
+    record({ motherFacultyName: "" }),
+    record({ faculty: 'ביה"ס לתלמידי חו"ל', motherFacultyName: null }),
+  ], MAP);
+  assert.deepEqual(s.campuses, ["גבעת רם", "הר הצופים"]);
+});
+
+test("an unknown faculty gives no campus, and is reported", () => {
+  const students = parseUniversity([record({ faculty: "פקולטה חדשה", motherFacultyName: "פקולטה חדשה" })], MAP);
+  assert.deepEqual(students[0].campuses, []);
   assert.deepEqual(unmappedFaculties(students, MAP), ["פקולטה חדשה"]);
 });
 
@@ -95,7 +114,7 @@ test("an ID with leading zeros arrives as a number, and is stored as given", () 
 });
 
 test("empty fields become null or an empty list", () => {
-  const [s] = parseUniversity([record({ hujiEmail: null, mobile: "", faculty: null, roadMaps: null })], MAP);
+  const [s] = parseUniversity([record({ hujiEmail: null, mobile: "", faculty: null, motherFacultyName: null, roadMaps: null })], MAP);
   assert.equal(s.university_email, null);
   assert.equal(s.phone, null);
   assert.deepEqual(s.campuses, []);

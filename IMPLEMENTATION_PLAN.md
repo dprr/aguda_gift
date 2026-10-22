@@ -178,10 +178,12 @@ employee types, so both spellings find the student.
 
 **Campuses come from the owner's faculty map (request 38).** `faculty-campus.csv` at the
 repository root maps each faculty to one campus: גבעת רם, הר הצופים, עין כרם, or רחובות.
-A student's campuses are the campuses of all the faculties in their records, so a student
-in 2 faculties on 2 campuses has 2. The loader reads the file at every sync, and reports
-any faculty the file lacks; that faculty gives no campus. In the 2027 list, 13,747
-students have 1 campus, 815 have 2, and 2 have 3.
+Which faculties count (request 39): the mother faculty (`motherFacultyName`) of each record
+that has one; only if no record of the student has one, the `faculty` of every record. A
+student's campuses are the campuses of those faculties, so a student with 2 mother
+faculties on 2 campuses has 2. The loader reads the file at every sync, and reports any
+counted faculty the file lacks; that faculty gives no campus. In the 2027 list, 13,983
+students have 1 campus, 581 have 2, none has 0 or 3, and no student needed the fallback.
 
 The sync writes these columns, and §5.3 updates only the ones whose value differs.
 
@@ -772,6 +774,7 @@ document is a wish list, and a section in it is not a request.
 | 36 | A fifth gift, the lunch box (קופסת אוכל), and smaller photos for all gifts |
 | 37 | A student who is not a member answers the survey, then sees how to register (`img/how_to_register.jpg`) instead of the gifts |
 | 38 | A student's campus comes from the faculty, through the owner's `faculty-campus.csv`, not from the university's campus field |
+| 39 | The campus comes from the mother faculty of each record that has one; only a student with no mother faculty at all falls back to the faculty |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

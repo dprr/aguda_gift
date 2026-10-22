@@ -43,8 +43,11 @@ const personal = (r: UniversityRecord) =>
 
 /**
  * Request 38. The owner's map from faculty to campus, in faculty-campus.csv at the
- * repository root. A student's campuses are the campuses of the faculties of their
- * records. The university's own campus field (campousNameList) is ignored.
+ * repository root. The university's own campus field (campousNameList) is ignored.
+ *
+ * Request 39: which faculties count. The mother faculty (motherFacultyName) of each record
+ * that has one. Only when no record of the student has a mother faculty, the faculty of
+ * every record instead. A student's campuses are the campuses of those faculties.
  */
 export type FacultyCampus = Map<string, string>;
 export const FACULTY_CAMPUS_PATH = join(import.meta.dirname, "..", "faculty-campus.csv");
@@ -74,12 +77,21 @@ export async function loadFacultyCampus(path = FACULTY_CAMPUS_PATH): Promise<Fac
   return map;
 }
 
-const campusesOf = (rs: UniversityRecord[], facultyCampus: FacultyCampus) =>
-  [...new Set(rs.map((r) => facultyCampus.get((r.faculty ?? "").trim())).filter((c): c is string => !!c))].sort();
+type FacultyFields = { motherFacultyName?: unknown; faculty?: unknown };
+const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
-/** Faculties in the students' records that the map does not know, so they got no campus. */
+/** Request 39: the mother faculties, or, if no record has one, the faculties. */
+export function countedFaculties(records: FacultyFields[]): string[] {
+  const mothers = records.map((r) => text(r.motherFacultyName)).filter(Boolean);
+  return [...new Set(mothers.length ? mothers : records.map((r) => text(r.faculty)).filter(Boolean))];
+}
+
+const campusesOf = (rs: FacultyFields[], facultyCampus: FacultyCampus) =>
+  [...new Set(countedFaculties(rs).map((f) => facultyCampus.get(f)).filter((c): c is string => !!c))].sort();
+
+/** Counted faculties that the map does not know, so they gave no campus. */
 export function unmappedFaculties(students: SourceStudent[], facultyCampus: FacultyCampus): string[] {
-  const faculties = students.flatMap((s) => s.programs.map((p) => String(p.faculty ?? "").trim()));
+  const faculties = students.flatMap((s) => countedFaculties(s.programs));
   return [...new Set(faculties.filter((f) => !facultyCampus.has(f)))].sort();
 }
 
