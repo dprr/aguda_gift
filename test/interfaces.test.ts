@@ -127,6 +127,27 @@ describe("student page", () => {
     }
   });
 
+  test("a non-member who answered the survey sees how to register, not the gifts (request 37)", async () => {
+    const page = await app.inject({ url: "/student", cookies: await asStudent(ids[8]) });
+    assert.match(page.body, /<a href="\/img\/how_to_register.jpg" target="_blank"><img class="register" src="\/img\/how_to_register.jpg" alt="[^"]+">/);
+    assert.match(page.body, /כדי להירשם לאגודה, עקוב אחרי השלבים בתמונה/);
+    assert.equal(count(page.body, "/student/confirm?gift="), 0);
+    const image = await app.inject({ url: "/img/how_to_register.jpg" });
+    assert.equal(image.statusCode, 200);
+    assert.equal(image.headers["content-type"], "image/jpeg");
+    assert.ok(image.rawPayload.length < 600_000, "a web-sized copy, not the 7.7 MB original");
+
+    const member = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
+    assert.doesNotMatch(member.body, /how_to_register/, "a member sees the gifts instead");
+  });
+
+  test("a non-member sees the survey first, and the registration image only after it", async () => {
+    await pool.query("UPDATE students SET survey = NULL, gender = 'Female' WHERE national_id = $1", [ids[8]]);
+    const page = await app.inject({ url: "/student", cookies: await asStudent(ids[8]) });
+    assert.match(page.body, /action="\/student\/survey"/);
+    assert.doesNotMatch(page.body, /how_to_register/);
+  });
+
   test("a lapsed member with a selection is told to renew (request 20)", async () => {
     await selectGift(ids[0], 2);
     await setMember(ids[0], false);

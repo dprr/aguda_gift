@@ -766,6 +766,7 @@ document is a wish list, and a section in it is not a request.
 | 34 | A staff member of any role who enters a wrong national ID at the desk 5 times in a row is removed from the staff. ~~owner@example.org gets an email naming them~~: replaced by request 35 |
 | 35 | Instead of email, every מנכ"ל sees an alert on the manager page naming the removed staff member, until cleared |
 | 36 | A fifth gift, the lunch box (קופסת אוכל), and smaller photos for all gifts |
+| 37 | A student who is not a member answers the survey, then sees how to register (`img/how_to_register.jpg`) instead of the gifts |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

@@ -50,6 +50,10 @@ export const T = {
     notMember: "לפי רשימת האוניברסיטה, אינך חבר אגודה. רק חברי אגודה יכולים לבחור מתנה.",
     notMemberFemale: "לפי רשימת האוניברסיטה, אינך חברת אגודה. רק חברי אגודה יכולים לבחור מתנה.",
     unknownMember: "אין לנו מידע על החברות שלך באגודה. פנה למשרד האגודה.",
+    /** Request 37: a non-member sees how to register, instead of the gifts. */
+    register: "כדי להירשם לאגודה, עקוב אחרי השלבים בתמונה. לחץ על התמונה כדי להגדיל אותה.",
+    registerFemale: "כדי להירשם לאגודה, עקבי אחרי השלבים בתמונה. לחצי על התמונה כדי להגדיל אותה.",
+    registerAlt: "הוראות הרשמה לאגודה דרך אפליקציית MyHuji ודרך המידע האישי באתר האוניברסיטה",
     unknownMemberFemale: "אין לנו מידע על החברות שלך באגודה. פני למשרד האגודה.",
     choose: "בחירת מתנה",
     chooseHint: "בחר מתנה אחת בלבד. הבחירה סופית.",
@@ -312,6 +316,7 @@ function layout(body: string, wide = false): string {
   .gift img, .photo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px;
                       background: var(--raised); }
   .photo { max-width: 16rem; display: block; }
+  img.register { width: 100%; height: auto; display: block; border-radius: 8px; }
   .gift strong { font-size: 1.1rem; }
   .big { font-size: 1.5rem; font-weight: 700; margin: 0.3rem 0; }
   .button.disabled { background: #3f4247; color: var(--muted); cursor: default; }
@@ -450,13 +455,15 @@ ${notice(message)}`;
 ${s.member === true ? `<a class="button secondary" href="/student/received">${f ? T.student.markReceivedFemale : T.student.markReceived}</a>` : ""}</div>`);
   }
 
-  // No selection, and not a member: nothing to choose.
+  // No selection, and not a member: nothing to choose. A non-member sees how to register
+  // instead (request 37). The image opens at full size, so a phone can zoom in.
   if (s.member !== true) {
-    const text =
-      s.member === null
-        ? f ? T.student.unknownMemberFemale : T.student.unknownMember
-        : isFemale(s.gender) ? T.student.notMemberFemale : T.student.notMember;
-    return layout(`${head}<p class="warn">${text}</p>`);
+    if (s.member === null) {
+      return layout(`${head}<p class="warn">${f ? T.student.unknownMemberFemale : T.student.unknownMember}</p>`);
+    }
+    return layout(`${head}<p class="warn">${f ? T.student.notMemberFemale : T.student.notMember}</p>
+<p>${f ? T.student.registerFemale : T.student.register}</p>
+<a href="/img/how_to_register.jpg" target="_blank"><img class="register" src="/img/how_to_register.jpg" alt="${T.student.registerAlt}"></a>`);
   }
 
   // A member with no selection: the gifts. A sold-out gift cannot be chosen (request 19).
