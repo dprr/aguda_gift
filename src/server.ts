@@ -391,13 +391,12 @@ export async function buildApp(options: AppOptions) {
     staffPage({ email: staffEmail(request), role: staffRole(request), campus: actor(request).campus, stats: await staffStats(scope(request)), ...extra });
 
   /**
-   * Request 41. A worker or a manager acts only on students of their own campus: the campus
-   * of the student's selection, or else the student's true campus. For any other student
-   * they learn only which campus serves the student. Null when the staff member may act.
+   * Request 41. A worker or a manager acts only on students of their own campus. For any
+   * other student they learn only the student's campus. Null when the staff member may act.
    */
   const otherCampus = (request: FastifyRequest, s: StudentView): Notice | null => {
     const mine = scope(request);
-    const theirs = s.gift_campus ?? s.true_campus;
+    const theirs = s.true_campus;
     if (actor(request).role === "ceo" || (mine && theirs === mine)) return null;
     if (!mine) return { kind: "error", text: T.staff.noOwnCampus };
     if (!theirs) return { kind: "error", text: T.staff.noStudentCampus };

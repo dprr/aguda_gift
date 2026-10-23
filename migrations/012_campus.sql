@@ -4,8 +4,9 @@
 -- agrees with campuses. Null when the student has no campus.
 ALTER TABLE students ADD COLUMN IF NOT EXISTS true_campus text GENERATED ALWAYS AS (campuses[1]) STORED;
 
--- The campus whose stock a selection took, so the counts stay right if true_campus changes.
-ALTER TABLE students ADD COLUMN IF NOT EXISTS gift_campus text;
+-- A first version also stored the campus of each selection. Students never move campus,
+-- so true_campus is enough (owner's decision).
+ALTER TABLE students DROP COLUMN IF EXISTS gift_campus;
 
 CREATE TABLE IF NOT EXISTS gift_stock (
   gift_id            integer NOT NULL REFERENCES gifts (id),

@@ -795,7 +795,7 @@ export function selectionsPage(options: { email: string; rows: SelectionView[]; 
   const { email, rows, message } = options;
   const M = T.manager;
   const body = rows
-    .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${esc(r.gift_campus ?? "—")}</td><td>${
+    .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${esc(r.true_campus ?? "—")}</td><td>${
       r.gift_taken_at ? `${M.receivedAt} ${when(r.gift_taken_at)}` : M.selected
     }</td><td>${
       r.gift_taken_at

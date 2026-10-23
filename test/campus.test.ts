@@ -63,10 +63,9 @@ describe("the true campus and the stock of each campus", () => {
     assert.equal((await student(ids[2])).true_campus, TEST_CAMPUS);
   });
 
-  test("a selection takes a unit from the student's own campus, and records it", async () => {
+  test("a selection takes a unit from the student's own campus", async () => {
     await setCampuses(ids[0], ["רחובות"]);
     assert.equal((await selectGift(ids[0], 2)).ok, true);
-    assert.equal((await student(ids[0])).gift_campus, "רחובות");
     assert.equal((await gift(2, "רחובות")).requested_count, 1);
     assert.equal((await gift(2, TEST_CAMPUS)).requested_count, 0);
   });
@@ -96,13 +95,12 @@ describe("the true campus and the stock of each campus", () => {
     assert.doesNotMatch(page, /confirm\?gift=/);
   });
 
-  test("a later change of campus does not move the selection's unit", async () => {
+  test("a handout counts on the student's campus", async () => {
     await setCampuses(ids[0], ["רחובות"]);
     await selectGift(ids[0], 4);
-    await setCampuses(ids[0], ["גבעת רם"]);
     assert.equal((await markTaken(ids[0])).ok, true);
     assert.equal((await gift(4, "רחובות")).given_count, 1);
-    assert.equal((await gift(4, "גבעת רם")).given_count, 0);
+    assert.equal((await gift(4, TEST_CAMPUS)).given_count, 0);
     assert.deepEqual(await counterDrift(), []);
   });
 

@@ -11,8 +11,6 @@ export type StudentView = {
   campuses: string[];
   /** Request 41: the first of `campuses`; its stock and its staff serve the student. */
   true_campus: string | null;
-  /** Request 41: the campus whose stock the selection took. */
-  gift_campus: string | null;
   member: boolean | null;
   member_changed_at: Date | null;
   gift_id: number | null;
@@ -25,7 +23,7 @@ export type StudentView = {
 
 export async function findStudent(nationalId: string): Promise<StudentView | null> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.campuses, s.true_campus, s.gift_campus, s.member,
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.campuses, s.true_campus, s.member,
             s.member_changed_at, s.gift_id, g.name AS gift_name, s.gift_taken_at,
             s.interactions, s.survey IS NOT NULL AS survey_submitted
        FROM students s LEFT JOIN gifts g ON g.id = s.gift_id
@@ -42,13 +40,13 @@ export type SelectionView = {
   last_name: string | null;
   gender: string | null;
   gift_name: string;
-  gift_campus: string | null;
+  true_campus: string | null;
   gift_taken_at: Date | null;
 };
 
 export async function listSelections(): Promise<SelectionView[]> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.gender, g.name AS gift_name, s.gift_campus, s.gift_taken_at
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, g.name AS gift_name, s.true_campus, s.gift_taken_at
        FROM students s JOIN gifts g ON g.id = s.gift_id
       ORDER BY s.gift_taken_at DESC NULLS LAST, g.id, s.last_name, s.first_name`,
   );

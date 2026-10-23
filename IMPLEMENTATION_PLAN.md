@@ -388,11 +388,10 @@ Four campuses: גבעת רם, הר הצופים, עין כרם, רחובות (`s
 - **`students.true_campus`**: a column the database computes as `campuses[1]`, the first
   campus in the student's sorted list, so it can never disagree with `campuses`. Null
   without a campus; such a student cannot select a gift.
-- **`students.gift_campus`**: the campus whose stock the selection took. Handout, reset,
-  and reversal adjust that campus's counters, so a later change of campus moves nothing.
+- **Students never move campus** (owner's decision), so selection, handout, deletion, and
+  reversal all use the stock of `true_campus`.
 - **`staff.campus`**: a worker's or a manager's campus; null for a ceo, who sees every
-  campus. A worker or manager acts only on students whose selection campus, or else true
-  campus, is their own. For any other student the desk shows only that student's campus,
+  campus. A worker or manager acts only on students whose true campus is their own. For any other student the desk shows only that student's campus,
   and the server refuses a handout or a deletion. A student of another campus is not a
   wrong ID (§4.3). A manager adds workers to their own campus, removes only those, and sets
   only their campus's stock. A ceo names the campus, and moves a person by adding them
