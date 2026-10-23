@@ -368,7 +368,8 @@ describe("dorms, special population, social, and more", () => {
     const set = (id: string, campuses: string[], gender: string | null) =>
       pool.query("UPDATE students SET campuses = $2, gender = $3 WHERE national_id = $1", [id, campuses, gender]);
     await set(ids[0], ["הר הצופים"], "נקבה");
-    await set(ids[1], ["גבעת רם", "רחובות"], "זכר");
+    await set(ids[1], ["רחובות"], "זכר");
+    await set(ids[3], ["גבעת רם", "רחובות"], "זכר");
     await set(ids[2], [], "זכר");
     const page = async (id: string) => {
       const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
@@ -387,9 +388,14 @@ describe("dorms, special population, social, and more", () => {
     assert.match(scopus, /אין קבוצת וואטסאפ בקמפוס הר הצופים. הקימי אחת בעצמך./, "female form");
     assert.match(rehovot, /instagram.com\/hafakulta/);
     assert.match(rehovot, /phone=972559500921/);
-    // Several campuses: a line for each campus with links.
-    assert.match(rehovot, /instagram.com\/aguda.givatram/);
-    assert.match(rehovot, />האינסטגרם של האגודה בקמפוס גבעת רם</);
+    // Several campuses: only the true campus, the first one (request 43). Exactly 2 lines.
+    const twoCampuses = await page(ids[3]);
+    assert.doesNotMatch(twoCampuses, /instagram.com\/hafakulta/, "not the second campus");
+    assert.match(twoCampuses, />האינסטגרם של האגודה בקמפוס גבעת רם</);
+    for (const html of [scopus, rehovot, twoCampuses]) {
+      const fieldset = html.slice(html.indexOf('name="social"') - 2000, html.indexOf('name="social"'));
+      assert.equal(fieldset.split('<p class="hint">').length - 1, 2, "exactly two link lines");
+    }
     assert.doesNotMatch(unknown, /בקמפוס/, "no campus line when the campus is unknown");
     assert.match(scopus, /target="_blank" rel="noopener noreferrer"/);
   });

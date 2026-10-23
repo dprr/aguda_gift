@@ -823,6 +823,7 @@ document is a wish list, and a section in it is not a request.
 | 40 | A מנכ"ל sees which student selected or received which gift, and can mark a received gift as not received; the gift counts follow |
 | 41 | One stock per campus. A worker or a manager belongs to one campus and serves only its students; a מנכ"ל sees all. A student's `true_campus` is the first campus in their list, and they select from its stock |
 | 42 | The true campus is the first campus in the university's record order, not in alphabetical order |
+| 43 | The survey shows exactly 2 lines of media links: Aguda's general links and the true campus's links. Every rule uses `true_campus`, never the full campus list |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

@@ -554,8 +554,8 @@ export function surveyPage(
   };
 
   /**
-   * Aguda's general links for everyone, then the links of each of the student's campuses
-   * (request 27). A campus listed without WhatsApp invites the student to start a group.
+   * Two lines (request 43): Aguda's general links, then the links of the student's true
+   * campus. A campus listed without WhatsApp invites the student to start a group.
    */
   const links = (q: Question): string => {
     if (!q.campusSocial) return "";
@@ -567,7 +567,7 @@ export function surveyPage(
     };
     const all: Social = AGUDA_SOCIAL;
     let out = line([all.instagram && a(all.instagram, T.survey.instagramAll), all.whatsapp && a(all.whatsapp, T.survey.whatsappAll)]);
-    for (const name of s.campuses) {
+    for (const name of s.true_campus ? [s.true_campus] : []) {
       const c = CAMPUS_SOCIAL[name];
       if (!c) continue;
       const campus = esc(name);
