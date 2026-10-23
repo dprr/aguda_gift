@@ -308,9 +308,9 @@ describe("dorms, special population, social, and more", () => {
     assert.deepEqual(!missing.ok && missing.errors, { dorms: "required" });
     const fake = validate(LIVE, { ...base, dorms: "yes", dorms_choice: "hilton" });
     assert.deepEqual(!fake.ok && fake.errors, { dorms: "invalid" });
-    const real = validate(LIVE, { ...base, dorms: "yes", dorms_choice: "meyersdorf" });
-    assert.ok(real.ok && real.answers.dorms_choice === "meyersdorf");
-    const no = validate(LIVE, { ...base, dorms: "no", dorms_choice: "meyersdorf" });
+    const real = validate(LIVE, { ...base, dorms: "yes", dorms_choice: "reznik" });
+    assert.ok(real.ok && real.answers.dorms_choice === "reznik");
+    const no = validate(LIVE, { ...base, dorms: "no", dorms_choice: "reznik" });
     assert.ok(no.ok && !("dorms_choice" in no.answers));
   });
 
@@ -349,15 +349,21 @@ describe("dorms, special population, social, and more", () => {
     assert.ok(validate(LIVE, { ...base, dorms: "no" }).ok);
   });
 
-  test("the dorm list holds the nine dorms of the official brochure, each value once", async () => {
+  test("the dorm list is exactly the owner's list of 2026-10-23, each value once", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
     const q = LIVE.questions.find((x) => x.id === "dorms")!;
     assert.ok(q.kind === "choice");
     const follow = q.options.find((o) => o.value === "yes")!.follow!;
     assert.ok(follow.kind === "select");
     const values = follow.groups.flatMap((g) => g.options.map((o) => o.value));
-    assert.equal(values.length, 9);
-    assert.equal(new Set(values).size, 9);
+    assert.equal(new Set(values).size, values.length);
+    const byCampus = Object.fromEntries(follow.groups.map((g) => [g.label, g.options.map((o) => o.label)]));
+    assert.deepEqual(byCampus, {
+      "הר הצופים": ["כפר הסטודנטים", "רזניק"],
+      "גבעת רם": ["ברנדמן", "צוויג", "ליברמן"],
+      "עין כרם": ["בוסטון", "גואטמלה", "שטרן"],
+      "רחובות": ["מעונות הפקולטה", "מעונות שיכון ובינוי"],
+    });
   });
 
   test("the dropdown, the general links, and each campus's own links render", async () => {

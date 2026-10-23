@@ -48,14 +48,14 @@ export type Question =
 
 export type Survey = { version: number; questions: Question[] };
 
-/** The HUJI dorms, from the official brochure מעונות תשפ"ו 2025-2026, p. 6. */
+/** The HUJI dorms, as the owner listed them on 2026-10-23. This list replaces every earlier one. */
 const DORMS = [
   { label: "הר הצופים", options: [
     { value: "kfar_hastudentim", label: "כפר הסטודנטים" },
-    { value: "bronfman", label: "ברונפמן (אידלסון)" },
-    { value: "meyersdorf", label: "מאירסדורף (רזניק)" },
+    { value: "reznik", label: "רזניק" },
   ] },
-  { label: "קמפוס אדמונד י. ספרא (גבעת רם)", options: [
+  { label: "גבעת רם", options: [
+    { value: "brandman", label: "ברנדמן" },
     { value: "zweig", label: "צוויג" },
     { value: "lieberman", label: "ליברמן" },
   ] },
@@ -64,7 +64,10 @@ const DORMS = [
     { value: "guatemala", label: "גואטמלה" },
     { value: "stern", label: "שטרן" },
   ] },
-  { label: "רחובות", options: [{ value: "rehovot", label: "רחובות" }] },
+  { label: "רחובות", options: [
+    { value: "faculty_dorms", label: "מעונות הפקולטה" },
+    { value: "shikun_binui", label: "מעונות שיכון ובינוי" },
+  ] },
 ];
 
 /**
