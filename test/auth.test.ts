@@ -93,14 +93,14 @@ const sessionOf = (res: { cookies: { name: string; value: string }[] }) =>
   res.cookies.find((c) => c.name === "session" && c.value)?.value;
 
 const boss = { email: "boss@aguda.org.il", email_verified: true, hd: "aguda.org.il" };
-const addWorker = (email: string) => pool.query("INSERT INTO staff (email, role) VALUES ($1, 'worker')", [email]);
+const addWorker = (email: string) => pool.query("INSERT INTO staff (email, role, campus) VALUES ($1, 'worker', 'הר הצופים')", [email]);
 
 describe("login flow", () => {
   let ids: string[];
   beforeEach(async () => {
     await freshDatabase();
     ids = await loadStudents(3, 2);
-    await pool.query("INSERT INTO staff (email, role) VALUES ('boss@aguda.org.il', 'manager')");
+    await pool.query("INSERT INTO staff (email, role, campus) VALUES ('boss@aguda.org.il', 'manager', 'הר הצופים')");
   });
 
   test("the student login page is the default, and links to the staff login page", async () => {

@@ -33,9 +33,9 @@ the later section is wrong.
 | Language | TypeScript, backend and frontend | One language for the whole system. The frontend is TypeScript either way |
 | Backend | Fastify | `app.inject()` tests concurrency in-process |
 | Frontend | **Server-rendered HTML. No React, no Vite, no build step** | The screens are a list of five gifts and one search box. React would add a build, a second `package.json`, a JSON API, and a second copy of the page logic (§0) |
-| Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are four small tables. An ORM would earn nothing (§0) |
+| Data layer | The `pg` driver and plain SQL. **No ORM** | Every statement in §5 is hand-written SQL, and there are five small tables. An ORM would earn nothing (§0) |
 | Database | PostgreSQL on RDS | Same price as a container once the instance is sized honestly, and it adds point-in-time recovery |
-| **Tables** | **4: `students`, `gifts`, `staff`, and `settings`** | §0. `staff` serves requests 24 and 25; `settings` serves request 33. Everything else serves no line in §14 |
+| **Tables** | **5: `students`, `gifts`, `gift_stock`, `staff`, and `settings`** | §0. `gift_stock` serves request 41; `staff`, requests 24 and 25; `settings`, request 33. Everything else serves no line in §14 |
 | Login | Two pages: students at `/`, staff at `/staff/login`. Google on both | Request 24. See §2 |
 | Passwords | **None** | Google authenticates. No reset path |
 | Staff roles | One `staff` table: every employee, marked `manager` or `worker` | Requests 25, 29, 32. Three roles, each with everything of the one below: `worker` (the desk), `manager` (also `/manager`: add and remove workers, set the stock), `ceo` (מנכ"ל, also add and remove managers, and download the data). On the website a person manages only roles strictly below their own, so only the `staff` command adds or removes a ceo |
@@ -127,7 +127,7 @@ directly.
 
 ## 4. Data model
 
-Four tables. Every timestamp is `timestamptz` in UTC. Display converts to Asia/Jerusalem.
+Five tables. Every timestamp is `timestamptz` in UTC. Display converts to Asia/Jerusalem.
 
 ### 4.1 `students`
 
@@ -243,14 +243,15 @@ cannot disagree.
 
 ### 4.2 `gifts`
 
+Since request 41 this table is the catalogue only: name, description, and photo. The
+counters below now live in `gift_stock` (§4.6), one row per gift and campus; read them as
+per campus.
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | integer, primary key, 1 to 5 | |
 | `name` | text, Hebrew | |
 | `description` | text, Hebrew | |
-| `starting_inventory` | integer, not null | Request 16. Set at seed time. A manager changes it on `/manager` (request 24) |
-| `requested_count` | integer, not null, default 0 | Request 16. Rises on each student selection |
-| `given_count` | integer, not null, default 0 | Request 16. Rises on each handover |
 
 Five rows (request 36). The seed inserts a gift if its `id` is absent, and otherwise updates only the
 name, the description, and the photo. A restart never resets a counter or the stock.
@@ -349,7 +350,7 @@ The `staff` command adds the first manager or ceo, and removes anyone:
 ```bash
 npm run staff -- manager someone@aguda.org.il             # on the laptop
 npm run staff -- ceo someone@aguda.org.il
-bash /home/opc/aguda/app/deploy/server.sh staff manager someone@aguda.org.il   # on the server
+bash /home/opc/aguda/app/deploy/server.sh staff manager someone@aguda.org.il הר\ הצופים   # on the server
 ```
 
 **Request 34: 5 wrong IDs in a row remove the person.** Each desk search that finds no
@@ -379,6 +380,35 @@ Which manager added a worker is not recorded (§13).
 A ceo switches `extra_questions` on the manager page. When it is off, the server removes
 the extra questions from the survey before it renders or checks it, so a student sees no
 checkbox and no section, and an extra answer sent anyway is never stored.
+
+### 4.5 Campuses (request 41)
+
+Four campuses: גבעת רם, הר הצופים, עין כרם, רחובות (`src/campus.ts`).
+
+- **`students.true_campus`**: a column the database computes as `campuses[1]`, the first
+  campus in the student's sorted list, so it can never disagree with `campuses`. Null
+  without a campus; such a student cannot select a gift.
+- **`students.gift_campus`**: the campus whose stock the selection took. Handout, reset,
+  and reversal adjust that campus's counters, so a later change of campus moves nothing.
+- **`staff.campus`**: a worker's or a manager's campus; null for a ceo, who sees every
+  campus. A worker or manager acts only on students whose selection campus, or else true
+  campus, is their own. For any other student the desk shows only that student's campus,
+  and the server refuses a handout or a deletion. A student of another campus is not a
+  wrong ID (§4.3). A manager adds workers to their own campus, removes only those, and sets
+  only their campus's stock. A ceo names the campus, and moves a person by adding them
+  again with another campus. Staff without a campus see no student until a ceo sets one.
+
+### 4.6 `gift_stock`
+
+| Column | Type | Notes |
+|---|---|---|
+| `gift_id`, `campus` | primary key | One row per gift and campus: 20 rows |
+| `starting_inventory` | integer | The owner's numbers of 2026-10-23, seeded once; a manager edits their campus, a ceo any campus |
+| `requested_count`, `given_count` | integer, default 0 | As §4.2 described them, per campus |
+
+Three CHECKs: never oversold, and neither counter below 0. Selection is the §5.1
+compare-and-swap on the row of the student's true campus.
+
 
 ---
 
@@ -789,6 +819,7 @@ document is a wish list, and a section in it is not a request.
 | 38 | A student's campus comes from the faculty, through the owner's `faculty-campus.csv`, not from the university's campus field |
 | 39 | The campus comes from the mother faculty of each record that has one; only a student with no mother faculty at all falls back to the faculty |
 | 40 | A מנכ"ל sees which student selected or received which gift, and can mark a received gift as not received; the gift counts follow |
+| 41 | One stock per campus. A worker or a manager belongs to one campus and serves only its students; a מנכ"ל sees all. A student's `true_campus` is the first campus in their list, and they select from its stock |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

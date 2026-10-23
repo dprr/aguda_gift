@@ -40,7 +40,7 @@ let ids: string[];
 beforeEach(async () => {
   await freshDatabase(5);
   ids = await loadStudents(10, 8); // students 0-7 are members, 8-9 are not
-  await pool.query("INSERT INTO staff (email, role) VALUES ('dana@aguda.org.il', 'worker'), ('boss@aguda.org.il', 'manager')");
+  await pool.query("INSERT INTO staff (email, role, campus) VALUES ('dana@aguda.org.il', 'worker', 'הר הצופים'), ('boss@aguda.org.il', 'manager', 'הר הצופים')");
   app = await buildApp({
     google: noGoogle,
     sessionSecret: "test-secret-test-secret-test-secret",
@@ -86,7 +86,7 @@ describe("student page", () => {
   });
 
   test("a sold-out gift is shown but cannot be chosen (request 19)", async () => {
-    await pool.query("UPDATE gifts SET requested_count = starting_inventory WHERE id = 2");
+    await pool.query("UPDATE gift_stock SET requested_count = starting_inventory WHERE gift_id = 2");
     const res = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
     assert.equal(count(res.body, 'href="/student/confirm?gift='), 3);
     assert.doesNotMatch(res.body, /confirm\?gift=2"/);
@@ -110,7 +110,7 @@ describe("student page", () => {
 
   test("a gift that sells out between the page and the click is explained", async () => {
     const cookies = await asStudent(ids[0]);
-    await pool.query("UPDATE gifts SET requested_count = starting_inventory WHERE id = 1");
+    await pool.query("UPDATE gift_stock SET requested_count = starting_inventory WHERE gift_id = 1");
     const post = await app.inject({ method: "POST", url: "/student/select", cookies, ...form({ gift_id: "1" }) });
     assert.equal(post.headers.location, "/student?error=sold_out");
     const page = await app.inject({ url: post.headers.location as string, cookies });
@@ -286,7 +286,7 @@ describe("staff page", () => {
   });
 
   test("counter drift is shown as an error", async () => {
-    await pool.query("UPDATE gifts SET given_count = 3 WHERE id = 4");
+    await pool.query("UPDATE gift_stock SET given_count = 3 WHERE gift_id = 4 AND campus = 'הר הצופים'");
     const res = await app.inject({ url: "/staff", cookies: await asStaff() });
     assert.match(res.body, /המונים אינם תואמים/);
   });
@@ -491,12 +491,12 @@ describe("manager page", () => {
     for (const t of ["students", "gifts", "staff"]) assert.match(page, new RegExp(`href="/manager/export/${t}.csv" download`));
 
     const add = (email: string, role: string) =>
-      app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role }) });
+      app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form({ email, role, campus: "הר הצופים" }) });
     assert.equal((await add("new@aguda.org.il", "manager")).headers.location, "/manager?done=added_manager");
     assert.equal((await add("dana@aguda.org.il", "manager")).headers.location, "/manager?done=promoted_manager");
     assert.equal((await add("dana@aguda.org.il", "worker")).headers.location, "/manager?error=higher", "never a demotion");
     assert.equal((await add("boss@aguda.org.il", "ceo")).headers.location, "/manager?error=forbidden_role");
-    const stock = await app.inject({ method: "POST", url: "/manager/stock", cookies, ...form({ gift_id: "1", starting_inventory: "9" }) });
+    const stock = await app.inject({ method: "POST", url: "/manager/stock", cookies, ...form({ gift_id: "1", campus: "רחובות", starting_inventory: "9" }) });
     assert.equal(stock.headers.location, "/manager?done=stock");
     // The list shows the highest role first.
     assert.match((await app.inject({ url: "/manager", cookies })).body, /chief@aguda\.org\.il.*boss@aguda\.org\.il/s);
@@ -628,7 +628,7 @@ describe("manager page", () => {
   });
 
   test("a manager cannot remove a manager or a ceo, and sees no button for them", async () => {
-    await pool.query("INSERT INTO staff (email, role) VALUES ('other@aguda.org.il', 'manager'), ('chief@aguda.org.il', 'ceo')");
+    await pool.query("INSERT INTO staff (email, role, campus) VALUES ('other@aguda.org.il', 'manager', 'הר הצופים'), ('chief@aguda.org.il', 'ceo', NULL)");
     const cookies = await asManager();
     for (const email of ["other@aguda.org.il", "chief@aguda.org.il"]) {
       const res = await app.inject({ method: "POST", url: "/manager/staff/remove", cookies, ...form({ email }) });
@@ -668,8 +668,8 @@ describe("manager page", () => {
   test("the manager page lists all the staff with their roles, and each gift's stock", async () => {
     const res = await app.inject({ url: "/manager", cookies: await asManager() });
     assert.equal(res.statusCode, 200);
-    assert.match(res.body, /boss@aguda\.org\.il<\/bdi><\/td><td>מנהל<\/td><td><\/td>/, "a manager has no remove button");
-    assert.match(res.body, /dana@aguda\.org\.il<\/bdi><\/td><td>עובד<\/td><td><form[^>]*staff\/remove/);
+    assert.match(res.body, /boss@aguda\.org\.il<\/bdi><\/td><td>מנהל<\/td><td>הר הצופים<\/td><td><\/td>/, "a manager has no remove button");
+    assert.match(res.body, /dana@aguda\.org\.il<\/bdi><\/td><td>עובד<\/td><td>הר הצופים<\/td><td><form[^>]*staff\/remove/);
     assert.equal(res.body.split('action="/manager/stock"').length - 1, 4);
     assert.equal(res.headers["cache-control"], "no-store");
   });

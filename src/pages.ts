@@ -5,6 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, SelectionView, StaffStats, StudentView } from "./queries.ts";
+import { CAMPUSES } from "./campus.ts";
 import { mayManage, type Role } from "./staff.ts";
 import { AGUDA_SOCIAL, CAMPUS_SOCIAL, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
@@ -91,11 +92,13 @@ export const T = {
       unknown_gift: "לא מצאנו את המתנה.",
       unknown_student: "לא מצאנו אותך ברשימת האוניברסיטה.",
       survey_missing: "ענה על הסקר לפני בחירת מתנה.",
+      no_campus: "לא מצאנו את הקמפוס שלך ברשימת האוניברסיטה. פנה למשרד האגודה.",
     },
     /** The feminine form of any error above whose wording changes for a woman. */
     errorsFemale: {
       sold_out: "המתנה שבחרת אזלה הרגע. בחרי מתנה אחרת.",
       survey_missing: "עני על הסקר לפני בחירת מתנה.",
+      no_campus: "לא מצאנו את הקמפוס שלך ברשימת האוניברסיטה. פני למשרד האגודה.",
     } as Partial<Record<string, string>>,
   },
 
@@ -153,6 +156,13 @@ export const T = {
     collectionReversed: "ביטול מסירה:",
     stock: "מלאי",
     stockCols: ["מתנה", "מלאי התחלתי", "סטודנטים בחרו", "סטודנטים קיבלו", "פנויות לבחירה", "במלאי בפועל"],
+    /** Request 41: campuses at the desk. */
+    campus: "קמפוס",
+    allCampuses: "כל הקמפוסים",
+    otherCampus: "הסטודנט שייך לקמפוס אחר. הפנה אותו לעמדת החלוקה בקמפוס",
+    otherCampusFemale: "הסטודנטית שייכת לקמפוס אחר. הפנה אותה לעמדת החלוקה בקמפוס",
+    noStudentCampus: "אין קמפוס ברשימה למספר הזהות הזה. פנה למנכ\"ל.",
+    noOwnCampus: "אין לך קמפוס ברשימת הצוות, ולכן אינך יכול לטפל בסטודנטים. פנה למנכ\"ל.",
     drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. דווח למפתח.",
     manage: "נהל עובדים ומלאי",
     /** Request 30: any staff member lets a student start again. */
@@ -177,7 +187,9 @@ export const T = {
     title: "ניהול",
     back: "חזור לעמדת החלוקה",
     staff: "צוות",
-    staffCols: ["דוא\"ל", "תפקיד", ""],
+    staffCols: ["דוא\"ל", "תפקיד", "קמפוס", ""],
+    campus: "קמפוס",
+    joinsYourCampus: "העובד יצטרף לקמפוס שלך:",
     roles: { worker: "עובד", manager: "מנהל", ceo: "מנכ\"ל" },
     managersHint: "כל איש צוות מוסיף ומסיר רק אנשי צוות בתפקיד נמוך מהתפקיד שלו. כדי להוסיף מנכ\"ל או להסיר מנכ\"ל, פנה למפתח.",
     newStaff: "כתובת דוא\"ל, בחשבון של האוניברסיטה או של האגודה",
@@ -195,7 +207,7 @@ export const T = {
     /** Request 40: the ceo's list of selections, and the reversal of a handout. */
     selections: "הצג את בחירות המתנות",
     selectionsTitle: "בחירות מתנות",
-    selectionsCols: ["שם", "מספר זהות", "מתנה", "מצב", ""],
+    selectionsCols: ["שם", "מספר זהות", "מתנה", "קמפוס", "מצב", ""],
     selectionsNone: "אף סטודנט עדיין לא בחר מתנה.",
     selected: "נבחרה",
     receivedAt: "נמסרה ב־",
@@ -220,6 +232,7 @@ export const T = {
       added_worker: "הוספנו את העובד.",
       added_manager: "הוספנו את המנהל.",
       added_ceo: "הוספנו את המנכ\"ל.",
+      moved: "עדכנו את הקמפוס.",
       promoted_manager: "עדכנו את התפקיד למנהל.",
       promoted_ceo: "עדכנו את התפקיד למנכ\"ל.",
       removed: "הסרנו את הכתובת מרשימת הצוות.",
@@ -236,6 +249,9 @@ export const T = {
       remove_forbidden: "אתה יכול להסיר רק איש צוות בתפקיד נמוך מהתפקיד שלך.",
       remove_self: "אינך יכול להסיר את עצמך.",
       invalid_role: "התפקיד אינו תקין.",
+      invalid_campus: "בחר קמפוס.",
+      no_campus: "אין לך קמפוס ברשימת הצוות. פנה למנכ\"ל.",
+      other_campus: "העובד הזה שייך לקמפוס אחר.",
       forbidden_role: "אתה יכול לתת רק תפקיד נמוך מהתפקיד שלך.",
       invalid_stock: "הזן מספר שלם, 0 או יותר.",
       unknown_gift: "לא מצאנו את המתנה.",
@@ -481,6 +497,9 @@ ${s.member === true ? `<a class="button secondary" href="/student/received">${f 
 <a href="/img/how_to_register.jpg" target="_blank"><img class="register" src="/img/how_to_register.jpg" alt="${T.student.registerAlt}"></a>`);
   }
 
+  // Request 41: a member with no campus has no stock to choose from.
+  if (!s.true_campus) return layout(`${head}<p class="warn">${studentErrorText("no_campus", s.gender)}</p>`);
+
   // A member with no selection: the gifts. A sold-out gift cannot be chosen (request 19).
   const cards = gifts
     .map((g) =>
@@ -723,13 +742,16 @@ export function resetConfirmPage(s: StudentView, what: "gift" | "all"): string {
 export function staffPage(options: {
   email: string;
   role: Role;
+  /** Request 41: the staff member's campus; null for a ceo, who sees every campus. */
+  campus: string | null;
   stats: StaffStats;
   student?: StudentView | null;
   searched?: boolean;
   message?: Notice;
 }): string {
-  const { email, role, stats, student, searched, message } = options;
-  const giftNames = new Map(stats.gifts.map((g) => [g.id, g.name]));
+  const { email, role, campus, stats, student, searched, message } = options;
+  const giftNames = stats.names;
+  const allCampuses = role === "ceo";
 
   const result = student
     ? studentCard(student, giftNames)
@@ -740,7 +762,7 @@ export function staffPage(options: {
   const rows = stats.gifts
     .map(
       (g) =>
-        `<tr><td>${esc(g.name)}</td>${[g.starting_inventory, g.requested_count, g.given_count, g.selectable, g.in_box]
+        `<tr>${allCampuses ? `<td>${esc(g.campus)}</td>` : ""}<td>${esc(g.name)}</td>${[g.starting_inventory, g.requested_count, g.given_count, g.selectable, g.in_box]
           .map((n) => `<td>${ltr(n)}</td>`)
           .join("")}</tr>`,
     )
@@ -749,8 +771,9 @@ export function staffPage(options: {
   const drift = stats.drift.length ? `<p class="error">${T.staff.drift}</p>` : "";
 
   return layout(
-    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
+    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)} · ${esc(allCampuses ? T.staff.allCampuses : campus ?? "—")}</span>${logoutForm()}</div>
 ${role !== "worker" ? `<p><a href="/manager">${T.staff.manage}</a></p>` : ""}
+${!allCampuses && !campus ? `<p class="error">${T.staff.noOwnCampus}</p>` : ""}
 ${drift}
 <form method="post" action="/staff/lookup">
   <label>${T.staff.search}<input name="national_id" dir="ltr" inputmode="numeric" autofocus autocomplete="off"></label>
@@ -759,7 +782,7 @@ ${drift}
 ${notice(message)}
 ${result}
 <section><h2>${T.staff.stock}</h2>
-<table><thead><tr>${T.staff.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr>${(allCampuses ? [T.staff.campus, ...T.staff.stockCols] : T.staff.stockCols).map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
 </section>`,
     true,
   );
@@ -772,7 +795,7 @@ export function selectionsPage(options: { email: string; rows: SelectionView[]; 
   const { email, rows, message } = options;
   const M = T.manager;
   const body = rows
-    .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${
+    .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${esc(r.gift_campus ?? "—")}</td><td>${
       r.gift_taken_at ? `${M.receivedAt} ${when(r.gift_taken_at)}` : M.selected
     }</td><td>${
       r.gift_taken_at
@@ -812,15 +835,18 @@ export function unmarkConfirmPage(s: StudentView): string {
 export function managerPage(options: {
   email: string;
   role: Role;
+  /** Request 41: the viewer's campus; null for a ceo. */
+  campus: string | null;
   /** Request 33: whether students see the survey's extra questions. */
   extraQuestions: boolean;
   /** Request 35: staff removed after 5 wrong IDs, shown to a ceo until cleared. */
   alerts: { at: string; email: string; role: string }[];
-  staff: { email: string; role: Role }[];
+  staff: { email: string; role: Role; campus: string | null }[];
   gifts: GiftView[];
   message?: Notice;
 }): string {
-  const { email, role, extraQuestions, alerts, staff, gifts, message } = options;
+  const { email, role, campus, extraQuestions, alerts, staff, gifts, message } = options;
+  const allCampuses = role === "ceo";
   const M = T.manager;
   // Request 32: only roles below the viewer's own.
   const roleOptions = (["worker", "manager", "ceo"] as const)
@@ -859,7 +885,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
   // where this viewer may remove (request 32): strictly below their own level.
   const staffRows = staff
     .map(
-      (m) => `<tr><td>${ltr(m.email)}</td><td>${M.roles[m.role]}</td><td>${
+      (m) => `<tr><td>${ltr(m.email)}</td><td>${M.roles[m.role]}</td><td>${esc(m.campus ?? (m.role === "ceo" ? T.staff.allCampuses : "—"))}</td><td>${
         mayManage(role, m.role) && m.email !== email
           ? `<form method="post" action="/manager/staff/remove">
   <input type="hidden" name="email" value="${esc(m.email)}">
@@ -872,9 +898,10 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
 
   const stockRows = gifts
     .map(
-      (g) => `<tr><td>${esc(g.name)}</td><td>${ltr(g.requested_count)}</td><td>${ltr(g.given_count)}</td><td>
+      (g) => `<tr>${allCampuses ? `<td>${esc(g.campus)}</td>` : ""}<td>${esc(g.name)}</td><td>${ltr(g.requested_count)}</td><td>${ltr(g.given_count)}</td><td>
 <form method="post" action="/manager/stock" class="inline">
   <input type="hidden" name="gift_id" value="${g.id}">
+  <input type="hidden" name="campus" value="${esc(g.campus)}">
   <input name="starting_inventory" value="${g.starting_inventory}" dir="ltr" inputmode="numeric" aria-label="${M.stockCols[3]} ${esc(g.name)}">
   <button class="button small">${M.save}</button>
 </form></td></tr>`,
@@ -893,12 +920,15 @@ ${notice(message)}
 <form method="post" action="/manager/staff/add">
   <label>${M.newStaff}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
   <label>${M.role} <select name="role">${roleOptions}</select></label>
+  ${allCampuses
+    ? `<label>${M.campus} <select name="campus" required><option value="">—</option>${CAMPUSES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>`
+    : `<p class="hint">${M.joinsYourCampus} ${esc(campus ?? "—")}</p>`}
   <button class="button">${M.add}</button>
 </form>
 </section>
 <section><h2>${M.stock}</h2>
 <p class="hint">${M.stockHint}</p>
-<table><thead><tr>${M.stockCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
+<table><thead><tr>${(allCampuses ? [M.campus, ...M.stockCols] : M.stockCols).map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
 </section>
 ${extraSwitch}
 ${downloads}`,

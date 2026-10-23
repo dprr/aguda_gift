@@ -4,7 +4,7 @@ export type SelectResult =
   | { ok: true; giftId: number }
   | {
       ok: false;
-      reason: "unknown_student" | "not_member" | "already_selected" | "unknown_gift" | "sold_out" | "survey_missing";
+      reason: "unknown_student" | "not_member" | "already_selected" | "unknown_gift" | "sold_out" | "survey_missing" | "no_campus";
     };
 
 /**
@@ -13,6 +13,9 @@ export type SelectResult =
  *
  * Two guards in one transaction. Either one failing rolls back both, so a student never
  * holds a gift without a unit of stock, and a unit is never claimed without a student.
+ *
+ * Request 41: the unit comes from the stock of the student's true campus, and the
+ * selection records that campus (gift_campus), so a later change of campus cannot move it.
  */
 export async function selectGift(nationalId: string, giftId: number): Promise<SelectResult> {
   return transaction(async (db) => {
@@ -22,15 +25,17 @@ export async function selectGift(nationalId: string, giftId: number): Promise<Se
     }
 
     // 1. Write-once. Runs first, so a retry or a double tap stops here and never
-    //    touches the shared gifts row. The survey must be submitted first (request 22).
+    //    touches the shared stock row. The survey must be submitted first (request 22).
     const chose = await db.query(
-      `UPDATE students SET gift_id = $2
-        WHERE national_id = $1 AND member IS TRUE AND gift_id IS NULL AND survey IS NOT NULL`,
+      `UPDATE students SET gift_id = $2, gift_campus = true_campus
+        WHERE national_id = $1 AND member IS TRUE AND gift_id IS NULL AND survey IS NOT NULL
+          AND true_campus IS NOT NULL
+        RETURNING gift_campus`,
       [nationalId, giftId],
     );
     if (chose.rowCount === 0) {
       const row = await db.query(
-        "SELECT member, gift_id, survey IS NOT NULL AS surveyed FROM students WHERE national_id = $1",
+        "SELECT member, gift_id, survey IS NOT NULL AS surveyed, true_campus FROM students WHERE national_id = $1",
         [nationalId],
       );
       const s = row.rows[0];
@@ -40,15 +45,17 @@ export async function selectGift(nationalId: string, giftId: number): Promise<Se
           ? "already_selected"
           : !s.surveyed
             ? "survey_missing"
-            : "not_member";
+            : s.member !== true
+              ? "not_member"
+              : "no_campus";
       throw new Rollback<SelectResult>({ ok: false, reason });
     }
 
-    // 2. The contended compare-and-swap. Every student meets on this one row.
+    // 2. The contended compare-and-swap. Every student of the campus meets on this row.
     const claimed = await db.query(
-      `UPDATE gifts SET requested_count = requested_count + 1
-        WHERE id = $1 AND requested_count < starting_inventory`,
-      [giftId],
+      `UPDATE gift_stock SET requested_count = requested_count + 1
+        WHERE gift_id = $1 AND campus = $2 AND requested_count < starting_inventory`,
+      [giftId, chose.rows[0].gift_campus],
     );
     if (claimed.rowCount === 0) {
       throw new Rollback<SelectResult>({ ok: false, reason: "sold_out" });
@@ -79,7 +86,7 @@ export async function markTaken(nationalId: string): Promise<TakeResult> {
           AND member IS TRUE
           AND gift_id IS NOT NULL
           AND gift_taken_at IS NULL
-        RETURNING gift_id, gift_taken_at`,
+        RETURNING gift_id, gift_campus, gift_taken_at`,
       [nationalId],
     );
 
@@ -97,8 +104,11 @@ export async function markTaken(nationalId: string): Promise<TakeResult> {
       throw new Rollback(result);
     }
 
-    const { gift_id, gift_taken_at } = taken.rows[0];
-    await db.query("UPDATE gifts SET given_count = given_count + 1 WHERE id = $1", [gift_id]);
+    const { gift_id, gift_campus, gift_taken_at } = taken.rows[0];
+    await db.query(
+      "UPDATE gift_stock SET given_count = given_count + 1 WHERE gift_id = $1 AND campus = $2",
+      [gift_id, gift_campus],
+    );
     return { ok: true, giftId: gift_id, takenAt: gift_taken_at };
   });
 }
@@ -120,14 +130,17 @@ export async function unmarkTaken(nationalId: string): Promise<UnmarkResult> {
               interactions = interactions || jsonb_build_array(jsonb_build_object(
                 'at', now(), 'type', 'gift_collection_reversed', 'gift_id', gift_id))
         WHERE national_id = $1 AND gift_taken_at IS NOT NULL
-        RETURNING gift_id`,
+        RETURNING gift_id, gift_campus`,
       [nationalId],
     );
     if (!r.rowCount) {
       const exists = await db.query("SELECT 1 FROM students WHERE national_id = $1", [nationalId]);
       throw new Rollback<UnmarkResult>({ ok: false, reason: exists.rowCount ? "not_taken" : "unknown_student" });
     }
-    await db.query("UPDATE gifts SET given_count = given_count - 1 WHERE id = $1", [r.rows[0].gift_id]);
+    await db.query(
+      "UPDATE gift_stock SET given_count = given_count - 1 WHERE gift_id = $1 AND campus = $2",
+      [r.rows[0].gift_id, r.rows[0].gift_campus],
+    );
     return { ok: true };
   });
 }
@@ -148,7 +161,7 @@ export type ResetResult =
 export async function resetStudent(nationalId: string, what: "gift" | "all"): Promise<ResetResult> {
   return transaction(async (db) => {
     const row = await db.query(
-      "SELECT gift_id, gift_taken_at, survey IS NOT NULL AS surveyed FROM students WHERE national_id = $1 FOR UPDATE",
+      "SELECT gift_id, gift_campus, gift_taken_at, survey IS NOT NULL AS surveyed FROM students WHERE national_id = $1 FOR UPDATE",
       [nationalId],
     );
     const s = row.rows[0];
@@ -157,12 +170,15 @@ export async function resetStudent(nationalId: string, what: "gift" | "all"): Pr
     if (s.gift_id === null && (what === "gift" || !s.surveyed)) return { ok: false, reason: "nothing" };
 
     await db.query(
-      `UPDATE students SET gift_id = NULL, survey = CASE WHEN $2 THEN NULL ELSE survey END
+      `UPDATE students SET gift_id = NULL, gift_campus = NULL, survey = CASE WHEN $2 THEN NULL ELSE survey END
         WHERE national_id = $1`,
       [nationalId, what === "all"],
     );
     if (s.gift_id !== null) {
-      await db.query("UPDATE gifts SET requested_count = requested_count - 1 WHERE id = $1", [s.gift_id]);
+      await db.query(
+        "UPDATE gift_stock SET requested_count = requested_count - 1 WHERE gift_id = $1 AND campus = $2",
+        [s.gift_id, s.gift_campus],
+      );
     }
     return { ok: true };
   });
@@ -173,18 +189,21 @@ export async function resetStudent(nationalId: string, what: "gift" | "all"): Pr
  * counter disagrees with the student rows. An empty list means no drift.
  */
 export async function counterDrift(): Promise<
-  { gift_id: number; counter: string; stored: number; actual: number }[]
+  { gift_id: number; campus: string; counter: string; stored: number; actual: number }[]
 > {
+  // Request 41: one pair of counters per gift and campus, checked against the selections
+  // that took their unit from that campus (gift_campus).
   const result = await pool.query(`
-    SELECT g.id AS gift_id, 'requested_count' AS counter,
-           g.requested_count AS stored, count(s.national_id)::int AS actual
-      FROM gifts g LEFT JOIN students s ON s.gift_id = g.id
-     GROUP BY g.id
-    HAVING g.requested_count <> count(s.national_id)
+    SELECT k.gift_id, k.campus, 'requested_count' AS counter,
+           k.requested_count AS stored, count(s.national_id)::int AS actual
+      FROM gift_stock k LEFT JOIN students s ON s.gift_id = k.gift_id AND s.gift_campus = k.campus
+     GROUP BY k.gift_id, k.campus
+    HAVING k.requested_count <> count(s.national_id)
     UNION ALL
-    SELECT g.id, 'given_count', g.given_count, count(s.national_id)::int
-      FROM gifts g LEFT JOIN students s ON s.gift_id = g.id AND s.gift_taken_at IS NOT NULL
-     GROUP BY g.id
-    HAVING g.given_count <> count(s.national_id)`);
+    SELECT k.gift_id, k.campus, 'given_count', k.given_count, count(s.national_id)::int
+      FROM gift_stock k LEFT JOIN students s
+        ON s.gift_id = k.gift_id AND s.gift_campus = k.campus AND s.gift_taken_at IS NOT NULL
+     GROUP BY k.gift_id, k.campus
+    HAVING k.given_count <> count(s.national_id)`);
   return result.rows;
 }

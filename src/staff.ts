@@ -10,27 +10,39 @@
  * changes a peer or themselves on the website, and only the command line, at the end of
  * this file, adds or removes a ceo.
  */
+import { type Campus, isCampus } from "./campus.ts";
 import { pool, Rollback, transaction } from "./db.ts";
 
 export type Role = "worker" | "manager" | "ceo";
 export const RANK: Record<Role, number> = { worker: 0, manager: 1, ceo: 2 };
 const isRole = (value: string): value is Role => value in RANK;
-export type StaffMember = { email: string; role: Role };
+/** Request 41: a worker or a manager has one campus; a ceo has none (every campus). */
+export type StaffMember = { email: string; role: Role; campus: Campus | null };
+/** The person acting, as the session and the staff table give them. */
+export type Actor = StaffMember;
 
 /**
  * The role of a staff email now, or null if it is not on the list. The server asks on
  * every staff request, not only at login, so a removed worker loses access on the next
  * click.
  */
-export async function roleOf(email: string): Promise<Role | null> {
-  const r = await pool.query("SELECT role FROM staff WHERE email = $1", [email.toLowerCase()]);
-  return r.rows[0]?.role ?? null;
+export async function staffOf(email: string): Promise<StaffMember | null> {
+  const r = await pool.query("SELECT email, role, campus FROM staff WHERE email = $1", [email.toLowerCase()]);
+  return r.rows[0] ?? null;
 }
 
-/** The highest role first, then by email. */
-export async function listStaff(): Promise<StaffMember[]> {
-  const r = await pool.query("SELECT email, role FROM staff");
-  return (r.rows as StaffMember[]).sort((a, b) => RANK[b.role] - RANK[a.role] || a.email.localeCompare(b.email));
+export async function roleOf(email: string): Promise<Role | null> {
+  return (await staffOf(email))?.role ?? null;
+}
+
+/**
+ * The staff a viewer sees: a ceo, everyone; a manager, their own campus (request 41).
+ * The highest role first, then by campus and email.
+ */
+export async function listStaff(campus: string | null = null): Promise<StaffMember[]> {
+  const r = await pool.query("SELECT email, role, campus FROM staff WHERE $1::text IS NULL OR campus = $1", [campus]);
+  return (r.rows as StaffMember[]).sort((a, b) =>
+    RANK[b.role] - RANK[a.role] || (a.campus ?? "").localeCompare(b.campus ?? "") || a.email.localeCompare(b.email));
 }
 
 /** A lowercase email whose domain is one of `staffDomains`, or the reason it is not. */
@@ -43,48 +55,69 @@ function checkEmail(email: string, staffDomains: string[]): { ok: true; email: s
 }
 
 export type AddStaffResult =
-  | { ok: true; done: `added_${Role}` | "promoted_manager" | "promoted_ceo" }
-  | { ok: false; reason: "invalid" | "wrong_domain" | "exists" | "higher" | "invalid_role" | "forbidden_role" };
+  | { ok: true; done: "added_worker" | "added_manager" | "promoted_manager" | "moved" }
+  | {
+      ok: false;
+      reason: "invalid" | "wrong_domain" | "exists" | "higher" | "invalid_role" | "forbidden_role"
+        | "invalid_campus" | "no_campus" | "other_campus";
+    };
 
 /** Request 32: a person acts only on roles strictly below their own. */
 export const mayManage = (by: Role, target: Role) => RANK[target] < RANK[by];
 
 /**
- * A manager or a ceo adds staff below their own level (request 32). Adding a person who
- * already has a lower role raises the role, in one statement. Nothing here lowers a role.
- * Staff log in with a university or an Aguda account, so the address needs one of those.
+ * Requests 32 and 41. A manager adds workers to their own campus. A ceo adds managers and
+ * workers to any campus, and moves a person to another campus by adding them again with
+ * it. Adding a person who already has a lower role raises the role; nothing here lowers a
+ * role, and nobody touches a person at or above their own level. Staff log in with a
+ * university or an Aguda account, so the address needs one of those.
  */
-export async function addStaff(email: string, role: string, staffDomains: string[], by: Role): Promise<AddStaffResult> {
+export async function addStaff(
+  email: string,
+  role: string,
+  campus: string | undefined,
+  staffDomains: string[],
+  by: Actor,
+): Promise<AddStaffResult> {
   if (!isRole(role)) return { ok: false, reason: "invalid_role" };
-  if (!mayManage(by, role)) return { ok: false, reason: "forbidden_role" };
+  if (!mayManage(by.role, role)) return { ok: false, reason: "forbidden_role" };
+  // A manager's staff always join the manager's own campus; a ceo names the campus.
+  const target = by.role === "ceo" ? campus : by.campus;
+  if (by.role !== "ceo" && !by.campus) return { ok: false, reason: "no_campus" };
+  if (!isCampus(target)) return { ok: false, reason: "invalid_campus" };
   const checked = checkEmail(email, staffDomains);
   if (!checked.ok) return checked;
 
-  // Insert, or raise a lower role. xmax = 0 marks an insert.
-  const r = await pool.query(
-    `INSERT INTO staff (email, role) VALUES ($1, $2)
-     ON CONFLICT (email) DO UPDATE SET role = excluded.role
-       WHERE (CASE staff.role WHEN 'worker' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END) < $3
-     RETURNING xmax = 0 AS inserted`,
-    [checked.email, role, RANK[role]],
-  );
-  if (r.rowCount) return { ok: true, done: r.rows[0].inserted ? `added_${role}` : role === "ceo" ? "promoted_ceo" : "promoted_manager" };
-  return { ok: false, reason: (await roleOf(checked.email)) === role ? "exists" : "higher" };
+  return transaction(async (db) => {
+    const r = await db.query("SELECT role, campus FROM staff WHERE email = $1 FOR UPDATE", [checked.email]);
+    const old = r.rows[0] as { role: Role; campus: string | null } | undefined;
+    if (!old) {
+      await db.query("INSERT INTO staff (email, role, campus) VALUES ($1, $2, $3)", [checked.email, role, target]);
+      return { ok: true, done: role === "manager" ? "added_manager" : "added_worker" } as AddStaffResult;
+    }
+    if (!mayManage(by.role, old.role) || RANK[role] < RANK[old.role]) return { ok: false, reason: "higher" } as AddStaffResult;
+    if (by.role !== "ceo" && old.campus !== by.campus) return { ok: false, reason: "other_campus" } as AddStaffResult;
+    if (old.role === role && old.campus === target) return { ok: false, reason: "exists" } as AddStaffResult;
+    await db.query("UPDATE staff SET role = $2, campus = $3 WHERE email = $1", [checked.email, role, target]);
+    return { ok: true, done: old.role !== role ? "promoted_manager" : "moved" } as AddStaffResult;
+  });
 }
 
 export type RemoveStaffResult = { ok: true } | { ok: false; reason: "not_found" | "forbidden" | "self" };
 
 /**
- * Request 32. A manager or a ceo removes staff strictly below their own level, so never a
- * peer and never themselves. The rule sits in the WHERE clause, so a role that changes at
- * the same moment cannot slip past it.
+ * Requests 32 and 41. A manager removes workers of their own campus; a ceo removes managers
+ * and workers of any campus. Never a peer, never themselves. The rule sits in the WHERE
+ * clause, so a role that changes at the same moment cannot slip past it.
  */
-export async function removeStaff(email: string, by: { email: string; role: Role }): Promise<RemoveStaffResult> {
+export async function removeStaff(email: string, by: Actor): Promise<RemoveStaffResult> {
   const e = email.trim().toLowerCase();
   if (e === by.email.toLowerCase()) return { ok: false, reason: "self" };
   const r = await pool.query(
-    "DELETE FROM staff WHERE email = $1 AND (CASE role WHEN 'worker' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END) < $2",
-    [e, RANK[by.role]],
+    `DELETE FROM staff WHERE email = $1
+        AND (CASE role WHEN 'worker' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END) < $2
+        AND ($3 = 'ceo' OR campus = $4)`,
+    [e, RANK[by.role], by.role, by.campus],
   );
   if (r.rowCount) return { ok: true };
   return { ok: false, reason: (await roleOf(e)) ? "forbidden" : "not_found" };
@@ -134,55 +167,60 @@ export type SetStockResult =
   | { ok: false; reason: "below_requested"; min: number };
 
 /**
- * A manager sets a gift's starting inventory. The new number can never fall below the
+ * A manager sets a gift's starting inventory on one campus (request 41). The new number can never fall below the
  * students who already selected the gift. The rule sits in the WHERE clause, so a
  * selection that lands at the same moment cannot slip under it, and the CHECK on `gifts`
  * backs it up.
  */
-export async function setStock(giftId: number, value: string): Promise<SetStockResult> {
+export async function setStock(giftId: number, campus: string, value: string): Promise<SetStockResult> {
   if (!/^\d{1,6}$/.test(value.trim())) return { ok: false, reason: "invalid" };
   const n = Number(value.trim());
   const r = await pool.query(
-    "UPDATE gifts SET starting_inventory = $2 WHERE id = $1 AND requested_count <= $2",
-    [giftId, n],
+    "UPDATE gift_stock SET starting_inventory = $3 WHERE gift_id = $1 AND campus = $2 AND requested_count <= $3",
+    [giftId, campus, n],
   );
   if (r.rowCount) return { ok: true };
-  const g = await pool.query("SELECT requested_count FROM gifts WHERE id = $1", [giftId]);
+  const g = await pool.query("SELECT requested_count FROM gift_stock WHERE gift_id = $1 AND campus = $2", [giftId, campus]);
   if (!g.rowCount) return { ok: false, reason: "unknown_gift" };
   return { ok: false, reason: "below_requested", min: g.rows[0].requested_count };
 }
 
 // ---- command line -----------------------------------------------------------------------
-//   npm run staff                            list the staff
-//   npm run staff -- manager <email>         add a manager, or set an existing person's role to manager
-//   npm run staff -- ceo <email>             add a ceo, or set an existing person's role to ceo
-//   npm run staff -- remove <email>          remove anyone
-// On the server: bash /home/opc/aguda/app/deploy/server.sh staff manager <email>
+//   npm run staff                                list the staff
+//   npm run staff -- manager <email> <campus>    add a manager of a campus, or set an existing person to it
+//   npm run staff -- ceo <email>                 add a ceo (every campus), or set an existing person to it
+//   npm run staff -- remove <email>              remove anyone
+// On the server: bash /home/opc/aguda/app/deploy/server.sh staff ceo <email>
 
 if (import.meta.main) {
-  const [command, email = ""] = process.argv.slice(2);
+  const [command, email = "", campus] = process.argv.slice(2);
   const domains = (process.env.STAFF_DOMAINS ?? "mail.huji.ac.il,aguda.org.il").split(",").map((d) => d.trim().toLowerCase());
   let code = 0;
   if (command === "manager" || command === "ceo") {
     const checked = checkEmail(email, domains);
-    if (checked.ok) {
-      await pool.query(
-        "INSERT INTO staff (email, role) VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET role = excluded.role",
-        [checked.email, command],
-      );
-      console.log(`${checked.email} is a ${command}`);
-    } else {
+    if (!checked.ok) {
       console.error(`refused: ${checked.reason}. Use an address in ${domains.join(" or ")}`);
       code = 1;
+    } else if (command === "manager" && !isCampus(campus)) {
+      console.error(`refused: a manager needs a campus: ${["גבעת רם", "הר הצופים", "עין כרם", "רחובות"].join(" | ")}`);
+      code = 1;
+    } else {
+      const target = command === "ceo" ? null : campus;
+      await pool.query(
+        `INSERT INTO staff (email, role, campus) VALUES ($1, $2, $3)
+         ON CONFLICT (email) DO UPDATE SET role = excluded.role, campus = excluded.campus`,
+        [checked.email, command, target],
+      );
+      console.log(`${checked.email} is a ${command}${target ? ` of ${target}` : ""}`);
     }
   } else if (command === "remove") {
     const r = await pool.query("DELETE FROM staff WHERE email = $1", [email.trim().toLowerCase()]);
     console.log(r.rowCount ? `${email} removed` : `${email} is not on the staff list`);
     code = r.rowCount ? 0 : 1;
   } else if (command === undefined) {
-    for (const m of await listStaff()) console.log(`${m.role}\t${m.email}`);
+    for (const m of await listStaff()) console.log(`${m.role}\t${m.campus ?? "-"}\t${m.email}`);
   } else {
-    console.error("usage: npm run staff -- [manager <email> | ceo <email> | remove <email>]");
+    console.error("usage: npm run staff -- [manager <email> <campus> | ceo <email> | remove <email>]");
     code = 1;
   }
   await pool.end();

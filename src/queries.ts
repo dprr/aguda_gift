@@ -7,8 +7,12 @@ export type StudentView = {
   first_name: string | null;
   last_name: string | null;
   gender: string | null;
-  /** The university's campus names. Request 27: a student can have several. */
+  /** The campuses of the student's faculties (request 38). A student can have several. */
   campuses: string[];
+  /** Request 41: the first of `campuses`; its stock and its staff serve the student. */
+  true_campus: string | null;
+  /** Request 41: the campus whose stock the selection took. */
+  gift_campus: string | null;
   member: boolean | null;
   member_changed_at: Date | null;
   gift_id: number | null;
@@ -21,7 +25,7 @@ export type StudentView = {
 
 export async function findStudent(nationalId: string): Promise<StudentView | null> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.campuses, s.member,
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.campuses, s.true_campus, s.gift_campus, s.member,
             s.member_changed_at, s.gift_id, g.name AS gift_name, s.gift_taken_at,
             s.interactions, s.survey IS NOT NULL AS survey_submitted
        FROM students s LEFT JOIN gifts g ON g.id = s.gift_id
@@ -38,20 +42,23 @@ export type SelectionView = {
   last_name: string | null;
   gender: string | null;
   gift_name: string;
+  gift_campus: string | null;
   gift_taken_at: Date | null;
 };
 
 export async function listSelections(): Promise<SelectionView[]> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.gender, g.name AS gift_name, s.gift_taken_at
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, g.name AS gift_name, s.gift_campus, s.gift_taken_at
        FROM students s JOIN gifts g ON g.id = s.gift_id
       ORDER BY s.gift_taken_at DESC NULLS LAST, g.id, s.last_name, s.first_name`,
   );
   return r.rows;
 }
 
+/** Request 41: one gift's stock on one campus. */
 export type GiftView = {
   id: number;
+  campus: string;
   name: string;
   description: string;
   /** A file name in img/, or null if the gift has no photo. */
@@ -65,22 +72,35 @@ export type GiftView = {
   in_box: number;
 };
 
-export async function listGifts(): Promise<GiftView[]> {
+/** The gifts with their stock on `campus`, or on every campus when `campus` is null. */
+export async function listGifts(campus: string | null): Promise<GiftView[]> {
   const r = await pool.query(
-    `SELECT id, name, description, image, starting_inventory, requested_count, given_count,
-            starting_inventory - requested_count AS selectable,
-            starting_inventory - given_count     AS in_box
-       FROM gifts ORDER BY id`,
+    `SELECT g.id, k.campus, g.name, g.description, g.image,
+            k.starting_inventory, k.requested_count, k.given_count,
+            k.starting_inventory - k.requested_count AS selectable,
+            k.starting_inventory - k.given_count     AS in_box
+       FROM gifts g JOIN gift_stock k ON k.gift_id = g.id
+      WHERE $1::text IS NULL OR k.campus = $1
+      ORDER BY k.campus, g.id`,
+    [campus],
   );
   return r.rows;
 }
 
+/** The gift names by id, whatever the campus: for history lines. */
+export async function giftNames(): Promise<Map<number, string>> {
+  const r = await pool.query("SELECT id, name FROM gifts");
+  return new Map(r.rows.map((g) => [g.id, g.name]));
+}
+
 export type StaffStats = {
   gifts: GiftView[];
+  names: Map<number, string>;
   drift: Awaited<ReturnType<typeof counterDrift>>;
 };
 
-export async function staffStats(): Promise<StaffStats> {
-  const [gifts, drift] = await Promise.all([listGifts(), counterDrift()]);
-  return { gifts, drift };
+/** The stock of one campus, or of every campus for a ceo (campus null). */
+export async function staffStats(campus: string | null): Promise<StaffStats> {
+  const [gifts, names, drift] = await Promise.all([listGifts(campus), giftNames(), counterDrift()]);
+  return { gifts, names, drift: drift.filter((d) => campus === null || d.campus === campus) };
 }

@@ -225,7 +225,7 @@ test("a deletion and a handout of one selection at the same moment: never both",
 });
 
 test("the database refuses a requested_count below zero", async () => {
-  await assert.rejects(pool.query("UPDATE gifts SET requested_count = -1 WHERE id = 1"), /gifts_requested_not_negative/);
+  await assert.rejects(pool.query("UPDATE gift_stock SET requested_count = -1 WHERE gift_id = 1"), /stock_requested_not_negative/);
 });
 
 // ---- request 40: a ceo reverses a handout ----------------------------------------------
@@ -242,5 +242,5 @@ test("two reversals of one handout at the same moment count once", async () => {
 });
 
 test("the database refuses a given_count below zero", async () => {
-  await assert.rejects(pool.query("UPDATE gifts SET given_count = -1 WHERE id = 1"), /gifts_given_not_negative/);
+  await assert.rejects(pool.query("UPDATE gift_stock SET given_count = -1 WHERE gift_id = 1"), /stock_given_not_negative/);
 });

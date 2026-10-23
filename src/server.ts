@@ -8,9 +8,10 @@ import { decide, type Domains, type Door, findStudentByEmail, type GoogleLogin, 
 import { pool } from "./db.ts";
 import { markTaken, resetStudent, selectGift, unmarkTaken } from "./gifts.ts";
 import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, selectionsPage, unmarkConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
-import { findStudent, listGifts, listSelections, staffStats } from "./queries.ts";
+import { findStudent, listGifts, listSelections, staffStats, type StudentView } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
-import { addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock } from "./staff.ts";
+import { type Actor, addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock, staffOf } from "./staff.ts";
+import { isCampus } from "./campus.ts";
 import { exportCsv, isExport } from "./export.ts";
 import { clearStaffAlerts, extraQuestionsEnabled, setExtraQuestions, staffAlerts } from "./settings.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
@@ -248,7 +249,7 @@ export async function buildApp(options: AppOptions) {
 
   // ---- the interfaces ----------------------------------------------------------------
 
-  type Authed = FastifyRequest & { session: Session; role?: Role };
+  type Authed = FastifyRequest & { session: Session; role?: Role; staff?: Actor };
 
   /** Plan §6: a student route refuses a staff session. 403, not 404. */
   async function requireStudent(request: FastifyRequest, reply: FastifyReply) {
@@ -267,15 +268,16 @@ export async function buildApp(options: AppOptions) {
       const session = readSession(request);
       if (!session) return reply.redirect("/staff/login");
       if (session.kind !== "staff") return reply.code(403).send("Forbidden");
-      const role = await roleOf(session.email);
-      if (!role) {
+      const staff = await staffOf(session.email);
+      if (!staff) {
         reply.clearCookie(SESSION_COOKIE, { path: "/" });
         return refuse(reply, "not_staff", "staff");
       }
       // Each role has everything of the role below it (request 29).
-      if (needed && RANK[role] < RANK[needed]) return reply.code(403).send("Forbidden");
+      if (needed && RANK[staff.role] < RANK[needed]) return reply.code(403).send("Forbidden");
       (request as Authed).session = session;
-      (request as Authed).role = role;
+      (request as Authed).role = staff.role;
+      (request as Authed).staff = staff;
     };
   }
   const sessionOf = (request: FastifyRequest) => (request as Authed).session;
@@ -288,6 +290,9 @@ export async function buildApp(options: AppOptions) {
     return s.kind === "staff" ? s.email : "";
   };
   const staffRole = (request: FastifyRequest) => (request as Authed).role ?? "worker";
+  const actor = (request: FastifyRequest): Actor => (request as Authed).staff!;
+  /** Request 41: the campus a staff member sees, or null for a ceo, who sees every campus. */
+  const scope = (request: FastifyRequest) => (actor(request).role === "ceo" ? null : actor(request).campus);
   const html = (reply: FastifyReply, body: string) => noStore(reply).type("text/html").send(body);
 
   // ---- student ------------------------------------------------------------------------
@@ -314,7 +319,8 @@ export async function buildApp(options: AppOptions) {
       else if (error && error in T.student.errors) {
         message = { kind: "error", text: studentErrorText(error as StudentError, s.gender) };
       }
-      return html(reply, studentPage(s, await listGifts(), message));
+      // Request 41: only the stock of the student's own campus.
+      return html(reply, studentPage(s, s.true_campus ? await listGifts(s.true_campus) : [], message));
     },
   );
 
@@ -322,10 +328,10 @@ export async function buildApp(options: AppOptions) {
     "/student/confirm",
     { preHandler: requireStudent },
     async (request, reply) => {
-      const gift = (await listGifts()).find((g) => g.id === Number(request.query.gift));
-      if (!gift) return reply.redirect("/student?error=unknown_gift");
       const s = await findStudent(studentId(request));
       if (!s?.survey_submitted) return reply.redirect("/student");
+      const gift = s.true_campus ? (await listGifts(s.true_campus)).find((g) => g.id === Number(request.query.gift)) : undefined;
+      if (!gift) return reply.redirect("/student?error=unknown_gift");
       return html(reply, confirmPage(gift, s.gender));
     },
   );
@@ -380,8 +386,26 @@ export async function buildApp(options: AppOptions) {
   // The national ID always travels in a POST body, so it never enters a URL, a browser
   // history, or an access log (plan §12). So search answers with a page, not a redirect.
 
+  /** The desk page, with this staff member's campus and its stock (request 41). */
+  const desk = async (request: FastifyRequest, extra: { student?: StudentView | null; searched?: boolean; message?: Notice } = {}) =>
+    staffPage({ email: staffEmail(request), role: staffRole(request), campus: actor(request).campus, stats: await staffStats(scope(request)), ...extra });
+
+  /**
+   * Request 41. A worker or a manager acts only on students of their own campus: the campus
+   * of the student's selection, or else the student's true campus. For any other student
+   * they learn only which campus serves the student. Null when the staff member may act.
+   */
+  const otherCampus = (request: FastifyRequest, s: StudentView): Notice | null => {
+    const mine = scope(request);
+    const theirs = s.gift_campus ?? s.true_campus;
+    if (actor(request).role === "ceo" || (mine && theirs === mine)) return null;
+    if (!mine) return { kind: "error", text: T.staff.noOwnCampus };
+    if (!theirs) return { kind: "error", text: T.staff.noStudentCampus };
+    return { kind: "warn", text: `${isFemale(s.gender) ? T.staff.otherCampusFemale : T.staff.otherCampus} ${esc(theirs)}.` };
+  };
+
   app.get("/staff", { preHandler: requireStaff() }, async (request, reply) => {
-    return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats() }));
+    return html(reply, await desk(request));
   });
 
   app.post<{ Body: { national_id?: string } }>(
@@ -389,7 +413,7 @@ export async function buildApp(options: AppOptions) {
     { preHandler: requireStaff() },
     async (request, reply) => {
       const id = deskId(request.body?.national_id);
-      if (!id) return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats() }));
+      if (!id) return html(reply, await desk(request));
       const student = await findStudent(id);
 
       // Request 34: the fifth wrong ID in a row removes this staff member. recordLookup()
@@ -400,10 +424,14 @@ export async function buildApp(options: AppOptions) {
         reply.clearCookie(SESSION_COOKIE, { path: "/" });
         return refuse(reply, "removed_lookups", "staff");
       }
+      if (student) {
+        const other = otherCampus(request, student);
+        if (other) return html(reply, await desk(request, { message: other }));
+      }
       const message: Notice | undefined = student
         ? undefined
         : { kind: "warn", text: `${T.staff.triesLeft} ${ltr(MAX_FAILED_LOOKUPS - record.failed)}.` };
-      return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: true, message }));
+      return html(reply, await desk(request, { student, searched: true, message }));
     },
   );
 
@@ -412,6 +440,9 @@ export async function buildApp(options: AppOptions) {
     { preHandler: requireStaff() },
     async (request, reply) => {
       const id = deskId(request.body?.national_id);
+      const before = await findStudent(id);
+      const other = before && otherCampus(request, before);
+      if (other) return html(reply, await desk(request, { message: other }));
       const result = await markTaken(id);
       const student = await findStudent(id);
 
@@ -431,7 +462,7 @@ export async function buildApp(options: AppOptions) {
       } else {
         message = { kind: "error", text: T.staff.notFound };
       }
-      return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: true, message }));
+      return html(reply, await desk(request, { student, searched: true, message }));
     },
   );
 
@@ -446,9 +477,9 @@ export async function buildApp(options: AppOptions) {
       const what = request.body?.what;
       if (what !== "gift" && what !== "all") return reply.code(400).send("Bad request");
       const before = await findStudent(id);
-      if (!before) {
-        return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student: null, searched: true }));
-      }
+      if (!before) return html(reply, await desk(request, { student: null, searched: true }));
+      const other = otherCampus(request, before);
+      if (other) return html(reply, await desk(request, { message: other }));
       if (request.body?.confirm !== "1") return html(reply, resetConfirmPage(before, what));
 
       const result = await resetStudent(id, what);
@@ -459,7 +490,7 @@ export async function buildApp(options: AppOptions) {
         : result.reason === "taken"
           ? { kind: "error", text: f ? T.staff.resetTakenFemale : T.staff.resetTaken }
           : { kind: "warn", text: T.staff.resetNothing };
-      return html(reply, staffPage({ email: staffEmail(request), role: staffRole(request), stats: await staffStats(), student, searched: true, message }));
+      return html(reply, await desk(request, { student, searched: true, message }));
     },
   );
 
@@ -482,20 +513,22 @@ export async function buildApp(options: AppOptions) {
       return html(reply, managerPage({
         email: staffEmail(request),
         role: staffRole(request),
+        campus: actor(request).campus,
         extraQuestions: await extraQuestionsEnabled(),
         alerts: staffRole(request) === "ceo" ? await staffAlerts() : [],
-        staff: await listStaff(),
-        gifts: await listGifts(),
+        // Request 41: a manager sees their own campus; a ceo sees every campus.
+        staff: await listStaff(scope(request)),
+        gifts: scope(request) === null && staffRole(request) !== "ceo" ? [] : await listGifts(scope(request)),
         message,
       }));
     },
   );
 
-  app.post<{ Body: { email?: string; role?: string } }>(
+  app.post<{ Body: { email?: string; role?: string; campus?: string } }>(
     "/manager/staff/add",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      const result = await addStaff(request.body?.email ?? "", request.body?.role ?? "", options.domains.staff, staffRole(request));
+      const result = await addStaff(request.body?.email ?? "", request.body?.role ?? "", request.body?.campus, options.domains.staff, actor(request));
       return reply.redirect(result.ok ? `/manager?done=${result.done}` : `/manager?error=${result.reason}`);
     },
   );
@@ -504,16 +537,19 @@ export async function buildApp(options: AppOptions) {
     "/manager/staff/remove",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      const result = await removeStaff(request.body?.email ?? "", { email: staffEmail(request), role: staffRole(request) });
+      const result = await removeStaff(request.body?.email ?? "", actor(request));
       return reply.redirect(result.ok ? "/manager?done=removed" : `/manager?error=${result.reason === "not_found" ? "not_found" : `remove_${result.reason}`}`);
     },
   );
 
-  app.post<{ Body: { gift_id?: string; starting_inventory?: string } }>(
+  app.post<{ Body: { gift_id?: string; campus?: string; starting_inventory?: string } }>(
     "/manager/stock",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      const result = await setStock(Number(request.body?.gift_id), request.body?.starting_inventory ?? "");
+      // Request 41: a manager sets their own campus's stock; a ceo names the campus.
+      const campus = staffRole(request) === "ceo" ? request.body?.campus : actor(request).campus;
+      if (!isCampus(campus)) return reply.redirect("/manager?error=invalid_campus");
+      const result = await setStock(Number(request.body?.gift_id), campus, request.body?.starting_inventory ?? "");
       if (result.ok) return reply.redirect("/manager?done=stock");
       return reply.redirect(
         result.reason === "below_requested"
