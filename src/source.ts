@@ -16,7 +16,7 @@ export type SourceStudent = {
   gender: string | null;
   phone: string | null;
   special_population: string | null;
-  /** The campuses of the student's faculties, from faculty-campus.csv (request 38), sorted. */
+  /** The campuses of the student's faculties (request 38), in the university's record order (request 42). */
   campuses: string[];
   /** One entry per university record, with its academic fields as the university names them. */
   programs: Record<string, unknown>[];

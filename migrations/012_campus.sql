@@ -1,6 +1,6 @@
 -- Request 41. One gift stock per campus, staff per campus, and each student's true campus.
 
--- The first campus in the student's sorted list. Computed by the database, so it always
+-- The first campus in the student's list (university record order, request 42). Computed by the database, so it always
 -- agrees with campuses. Null when the student has no campus.
 ALTER TABLE students ADD COLUMN IF NOT EXISTS true_campus text GENERATED ALWAYS AS (campuses[1]) STORED;
 

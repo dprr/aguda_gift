@@ -86,8 +86,12 @@ export function countedFaculties(records: FacultyFields[]): string[] {
   return [...new Set(mothers.length ? mothers : records.map((r) => text(r.faculty)).filter(Boolean))];
 }
 
+/**
+ * Request 42: the campuses in the university's record order, not sorted, so the first one,
+ * students.true_campus, is the campus of the student's first counted record.
+ */
 const campusesOf = (rs: FacultyFields[], facultyCampus: FacultyCampus) =>
-  [...new Set(countedFaculties(rs).map((f) => facultyCampus.get(f)).filter((c): c is string => !!c))].sort();
+  [...new Set(countedFaculties(rs).map((f) => facultyCampus.get(f)).filter((c): c is string => !!c))];
 
 /** Counted faculties that the map does not know, so they gave no campus. */
 export function unmappedFaculties(students: SourceStudent[], facultyCampus: FacultyCampus): string[] {

@@ -77,6 +77,14 @@ test("two mother faculties on two campuses give two campuses", () => {
   assert.deepEqual(s.campuses, ["גבעת רם", "הר הצופים"]);
 });
 
+test("the campuses keep the university's record order, so the first record's campus comes first (request 42)", () => {
+  const [s] = parseUniversity([
+    record({ faculty: 'ביה"ס לתלמידי חו"ל', motherFacultyName: 'ביה"ס לתלמידי חו"ל' }), // הר הצופים
+    record(), // מתמטיקה → גבעת רם
+  ], MAP);
+  assert.deepEqual(s.campuses, ["הר הצופים", "גבעת רם"], "not alphabetical");
+});
+
 test("with no mother faculty in any record, every record's faculty counts", () => {
   const [s] = parseUniversity([
     record({ motherFacultyName: "" }),

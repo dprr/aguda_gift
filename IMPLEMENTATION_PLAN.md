@@ -385,8 +385,11 @@ checkbox and no section, and an extra answer sent anyway is never stored.
 
 Four campuses: גבעת רם, הר הצופים, עין כרם, רחובות (`src/campus.ts`).
 
-- **`students.true_campus`**: a column the database computes as `campuses[1]`, the first
-  campus in the student's sorted list, so it can never disagree with `campuses`. Null
+- **`students.true_campus`**: a column the database computes as `campuses[1]`, so it can
+  never disagree with `campuses`. Request 42: `campuses` keeps the university's record
+  order, not sorted, so the true campus is the campus of the student's first counted
+  record (§4.1). This differs from alphabetical order for 261 of the 581 students with 2
+  campuses in the 2027 list. Null
   without a campus; such a student cannot select a gift.
 - **Students never move campus** (owner's decision), so selection, handout, deletion, and
   reversal all use the stock of `true_campus`.
@@ -819,6 +822,7 @@ document is a wish list, and a section in it is not a request.
 | 39 | The campus comes from the mother faculty of each record that has one; only a student with no mother faculty at all falls back to the faculty |
 | 40 | A מנכ"ל sees which student selected or received which gift, and can mark a received gift as not received; the gift counts follow |
 | 41 | One stock per campus. A worker or a manager belongs to one campus and serves only its students; a מנכ"ל sees all. A student's `true_campus` is the first campus in their list, and they select from its stock |
+| 42 | The true campus is the first campus in the university's record order, not in alphabetical order |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
