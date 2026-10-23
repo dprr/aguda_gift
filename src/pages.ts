@@ -4,7 +4,7 @@
  * English pass edits one object (plan §7). Masculine is the neutral form: see
  * .claude/skills/hebrew-text.
  */
-import type { GiftView, StaffStats, StudentView } from "./queries.ts";
+import type { GiftView, SelectionView, StaffStats, StudentView } from "./queries.ts";
 import { mayManage, type Role } from "./staff.ts";
 import { AGUDA_SOCIAL, CAMPUS_SOCIAL, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
@@ -150,6 +150,7 @@ export const T = {
     alreadyOldEnd: "אל תמסור אותה שוב.",
     history: "היסטוריה",
     collected: "קבלת מתנה:",
+    collectionReversed: "ביטול מסירה:",
     stock: "מלאי",
     stockCols: ["מתנה", "מלאי התחלתי", "סטודנטים בחרו", "סטודנטים קיבלו", "פנויות לבחירה", "במלאי בפועל"],
     drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. דווח למפתח.",
@@ -191,6 +192,20 @@ export const T = {
     alertRemoved: "הסרנו מרשימת הצוות את",
     alertReason: "אחרי 5 חיפושים ברצף של מספר זהות שאינו קיים.",
     alertsClear: "נקה את ההתראות",
+    /** Request 40: the ceo's list of selections, and the reversal of a handout. */
+    selections: "הצג את בחירות המתנות",
+    selectionsTitle: "בחירות מתנות",
+    selectionsCols: ["שם", "מספר זהות", "מתנה", "מצב", ""],
+    selectionsNone: "אף סטודנט עדיין לא בחר מתנה.",
+    selected: "נבחרה",
+    receivedAt: "נמסרה ב־",
+    unmark: "סמן כלא נמסרה",
+    unmarkTitle: "ביטול מסירה",
+    unmarkWarn: "אחרי הביטול, המתנה תיחשב כלא נמסרה, ועמדת חלוקה תוכל למסור אותה שוב. בטל רק אם הסטודנט לא קיבל את המתנה בפועל.",
+    unmarkWarnFemale: "אחרי הביטול, המתנה תיחשב כלא נמסרה, ועמדת חלוקה תוכל למסור אותה שוב. בטל רק אם הסטודנטית לא קיבלה את המתנה בפועל.",
+    unmarkConfirm: "בטל את המסירה",
+    unmarkDone: "ביטלנו את המסירה. המתנה במצב \"נבחרה\".",
+    unmarkNotTaken: "המתנה כבר אינה מסומנת כנמסרה.",
     /** Request 33: the ceo's switch for the survey's extra questions. */
     extraTitle: "שאלות נוספות בסקר",
     extraIsOn: "הסטודנטים יכולים לפתוח את השאלות הנוספות (לא חובה).",
@@ -668,7 +683,7 @@ function studentCard(s: StudentView, giftNames: Map<number, string>): string {
 
   const history = s.interactions.length
     ? `<h3>${T.staff.history}</h3><ul>${s.interactions
-        .map((i) => `<li>${when(i.at)} ${T.staff.collected} ${esc(giftNames.get(i.gift_id!) ?? i.gift_id)}</li>`)
+        .map((i) => `<li>${when(i.at)} ${i.type === "gift_collection_reversed" ? T.staff.collectionReversed : T.staff.collected} ${esc(giftNames.get(i.gift_id!) ?? i.gift_id)}</li>`)
         .join("")}</ul>`
     : "";
 
@@ -752,6 +767,48 @@ ${result}
 
 // ---- manager (request 24) ----------------------------------------------------------------
 
+/** Request 40: the ceo's list of every gift selection, with a reversal for each handout. */
+export function selectionsPage(options: { email: string; rows: SelectionView[]; message?: Notice }): string {
+  const { email, rows, message } = options;
+  const M = T.manager;
+  const body = rows
+    .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${
+      r.gift_taken_at ? `${M.receivedAt} ${when(r.gift_taken_at)}` : M.selected
+    }</td><td>${
+      r.gift_taken_at
+        ? `<form method="post" action="/manager/gifts/unmark">
+  <input type="hidden" name="national_id" value="${esc(r.national_id)}">
+  <button class="button secondary small">${M.unmark}</button>
+</form>`
+        : ""
+    }</td></tr>`)
+    .join("");
+  return layout(
+    `<div class="bar"><h1>${M.selectionsTitle}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
+<p><a href="/manager">${M.title}</a></p>
+${notice(message)}
+${rows.length
+  ? `<table><thead><tr>${M.selectionsCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`
+  : `<p class="hint">${M.selectionsNone}</p>`}`,
+    true,
+  );
+}
+
+/** Request 40: a reversal lets a desk hand the gift over again, so it takes a second step. */
+export function unmarkConfirmPage(s: StudentView): string {
+  const M = T.manager;
+  return layout(`<h1>${M.unmarkTitle}</h1>
+<p class="big">${esc(s.first_name)} ${esc(s.last_name)}</p>
+<p>${ltr(s.national_id)} · ${esc(s.gift_name)} · ${M.receivedAt} ${when(s.gift_taken_at)}</p>
+<p class="warn">${isFemale(s.gender) ? M.unmarkWarnFemale : M.unmarkWarn}</p>
+<form method="post" action="/manager/gifts/unmark">
+  <input type="hidden" name="national_id" value="${esc(s.national_id)}">
+  <input type="hidden" name="confirm" value="1">
+  <button class="button">${M.unmarkConfirm}</button>
+</form>
+<a class="button secondary" href="/manager/gifts">${T.staff.back}</a>`);
+}
+
 export function managerPage(options: {
   email: string;
   role: Role;
@@ -779,6 +836,7 @@ export function managerPage(options: {
   <button class="button secondary small">${M.alertsClear}</button>
 </form></div>`
     : "";
+  const selectionsLink = role === "ceo" ? `<p><a href="/manager/gifts">${M.selections}</a></p>` : "";
   const extraSwitch = role === "ceo"
     ? `<section><h2>${M.extraTitle}</h2>
 <p class="${extraQuestions ? "ok" : "warn"}">${extraQuestions ? M.extraIsOn : M.extraIsOff}</p>
@@ -826,6 +884,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
   return layout(
     `<div class="bar"><h1>${M.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
 <p><a href="/staff">${M.back}</a></p>
+${selectionsLink}
 ${alertBox}
 ${notice(message)}
 <section><h2>${M.staff}</h2>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import { pool } from "../src/db.ts";
-import { counterDrift, markTaken, resetStudent, selectGift } from "../src/gifts.ts";
+import { counterDrift, markTaken, resetStudent, selectGift, unmarkTaken } from "../src/gifts.ts";
 import { freshDatabase, gift, loadStudents, setMember, student } from "./helpers.ts";
 
 beforeEach(() => freshDatabase());
@@ -226,4 +226,21 @@ test("a deletion and a handout of one selection at the same moment: never both",
 
 test("the database refuses a requested_count below zero", async () => {
   await assert.rejects(pool.query("UPDATE gifts SET requested_count = -1 WHERE id = 1"), /gifts_requested_not_negative/);
+});
+
+// ---- request 40: a ceo reverses a handout ----------------------------------------------
+
+test("two reversals of one handout at the same moment count once", async () => {
+  const [id] = await loadStudents(1);
+  await selectGift(id, 1);
+  await markTaken(id);
+  const results = await Promise.all([unmarkTaken(id), unmarkTaken(id)]);
+  assert.equal(results.filter((r) => r.ok).length, 1);
+  assert.equal((await gift(1)).given_count, 0);
+  assert.deepEqual(await counterDrift(), []);
+  assert.deepEqual(await unmarkTaken("999"), { ok: false, reason: "unknown_student" });
+});
+
+test("the database refuses a given_count below zero", async () => {
+  await assert.rejects(pool.query("UPDATE gifts SET given_count = -1 WHERE id = 1"), /gifts_given_not_negative/);
 });

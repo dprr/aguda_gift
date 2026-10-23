@@ -103,6 +103,35 @@ export async function markTaken(nationalId: string): Promise<TakeResult> {
   });
 }
 
+export type UnmarkResult = { ok: true } | { ok: false; reason: "unknown_student" | "not_taken" };
+
+/**
+ * Request 40. A ceo reverses a handout that should not have been recorded, for example a
+ * student's mistaken "I received it". The selection stays, the gift's given_count goes
+ * down by one, and the history gains a reversal entry; the collection entry stays, so the
+ * history still shows what happened. The guard is in the WHERE clause, so a double click
+ * reverses once.
+ */
+export async function unmarkTaken(nationalId: string): Promise<UnmarkResult> {
+  return transaction(async (db) => {
+    const r = await db.query(
+      `UPDATE students
+          SET gift_taken_at = NULL,
+              interactions = interactions || jsonb_build_array(jsonb_build_object(
+                'at', now(), 'type', 'gift_collection_reversed', 'gift_id', gift_id))
+        WHERE national_id = $1 AND gift_taken_at IS NOT NULL
+        RETURNING gift_id`,
+      [nationalId],
+    );
+    if (!r.rowCount) {
+      const exists = await db.query("SELECT 1 FROM students WHERE national_id = $1", [nationalId]);
+      throw new Rollback<UnmarkResult>({ ok: false, reason: exists.rowCount ? "not_taken" : "unknown_student" });
+    }
+    await db.query("UPDATE gifts SET given_count = given_count - 1 WHERE id = $1", [r.rows[0].gift_id]);
+    return { ok: true };
+  });
+}
+
 export type ResetResult =
   | { ok: true }
   | { ok: false; reason: "unknown_student" | "taken" | "nothing" };

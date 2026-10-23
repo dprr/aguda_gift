@@ -289,6 +289,10 @@ delete a selection, so the counter also goes down. The deletion locks the studen
 decrements only for a selection it really cleared, so the check should never fire; it
 guards every other writer.
 
+**`given_count >= 0`** (`gifts_given_not_negative`, request 40). A ceo can now reverse a
+handout, so this counter also goes down. The reversal decrements only for a handout it
+really cleared, in one transaction, so the check should never fire.
+
 **No other check.** `given_count <= requested_count` cannot fail either, because §5.2 requires a non-null
 `gift_id`, and that means §5.1 already incremented `requested_count` for the same gift.
 
@@ -498,6 +502,15 @@ wifi, so say so rather than raising an alarm.
 ⚠️ **A lapsed member's unit is never released.** The owner chose this. If the student does
 not renew, `requested_count` keeps that unit forever and no other student can select it.
 §13 records the release path.
+
+### 5.2.1 A ceo reverses a handout (request 40)
+
+`/manager/gifts` lists every student with a selection, received first. For a received
+gift, a ceo can mark it as not received, after a confirm step. `unmarkTaken()` in
+`src/gifts.ts` clears `gift_taken_at` with a guard in the `WHERE` clause, appends a
+`gift_collection_reversed` entry to `interactions`, and decrements `given_count`, all in
+one transaction. The selection stays, so a desk, or the student, can mark it again. The
+log records the ceo's email, never the national ID.
 
 ### 5.3 Apply a synchronization
 
@@ -775,6 +788,7 @@ document is a wish list, and a section in it is not a request.
 | 37 | A student who is not a member answers the survey, then sees how to register (`img/how_to_register.jpg`) instead of the gifts |
 | 38 | A student's campus comes from the faculty, through the owner's `faculty-campus.csv`, not from the university's campus field |
 | 39 | The campus comes from the mother faculty of each record that has one; only a student with no mother faculty at all falls back to the faculty |
+| 40 | A מנכ"ל sees which student selected or received which gift, and can mark a received gift as not received; the gift counts follow |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

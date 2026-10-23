@@ -6,9 +6,9 @@ import formbody from "@fastify/formbody";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, type Door, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
-import { markTaken, resetStudent, selectGift } from "./gifts.ts";
-import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
-import { findStudent, listGifts, staffStats } from "./queries.ts";
+import { markTaken, resetStudent, selectGift, unmarkTaken } from "./gifts.ts";
+import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, selectionsPage, unmarkConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
+import { findStudent, listGifts, listSelections, staffStats } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock } from "./staff.ts";
 import { exportCsv, isExport } from "./export.ts";
@@ -520,6 +520,37 @@ export async function buildApp(options: AppOptions) {
           ? `/manager?error=below_requested&min=${result.min}`
           : `/manager?error=${result.reason === "invalid" ? "invalid_stock" : result.reason}`,
       );
+    },
+  );
+
+  // Request 40: a ceo sees every gift selection, and reverses a mistaken handout. The
+  // national ID travels in the POST body, never in a URL (plan §12).
+  app.get<{ Querystring: { done?: string; error?: string } }>(
+    "/manager/gifts",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const { done, error } = request.query;
+      const message: Notice | undefined = done === "unmarked"
+        ? { kind: "ok", text: T.manager.unmarkDone }
+        : error === "not_taken" ? { kind: "warn", text: T.manager.unmarkNotTaken } : undefined;
+      return html(reply, selectionsPage({ email: staffEmail(request), rows: await listSelections(), message }));
+    },
+  );
+
+  app.post<{ Body: { national_id?: string; confirm?: string } }>(
+    "/manager/gifts/unmark",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const id = deskId(request.body?.national_id);
+      const student = id ? await findStudent(id) : null;
+      if (!student) return reply.redirect("/manager/gifts?error=not_taken");
+      if (request.body?.confirm !== "1") {
+        if (!student.gift_taken_at) return reply.redirect("/manager/gifts?error=not_taken");
+        return html(reply, unmarkConfirmPage(student));
+      }
+      const result = await unmarkTaken(id);
+      if (result.ok) request.log.info({ by: staffEmail(request) }, "handout reversed");
+      return reply.redirect(result.ok ? "/manager/gifts?done=unmarked" : "/manager/gifts?error=not_taken");
     },
   );
 

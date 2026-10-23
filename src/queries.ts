@@ -31,6 +31,25 @@ export async function findStudent(nationalId: string): Promise<StudentView | nul
   return r.rows[0] ?? null;
 }
 
+/** Request 40: every student with a gift selection, for the ceo. Received first, newest first. */
+export type SelectionView = {
+  national_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  gender: string | null;
+  gift_name: string;
+  gift_taken_at: Date | null;
+};
+
+export async function listSelections(): Promise<SelectionView[]> {
+  const r = await pool.query(
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, g.name AS gift_name, s.gift_taken_at
+       FROM students s JOIN gifts g ON g.id = s.gift_id
+      ORDER BY s.gift_taken_at DESC NULLS LAST, g.id, s.last_name, s.first_name`,
+  );
+  return r.rows;
+}
+
 export type GiftView = {
   id: number;
   name: string;

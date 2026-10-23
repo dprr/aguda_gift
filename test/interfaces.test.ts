@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { after, beforeEach, describe, test } from "node:test";
 import type { GoogleLogin } from "../src/auth.ts";
 import { pool } from "../src/db.ts";
-import { markTaken, selectGift } from "../src/gifts.ts";
+import { counterDrift, markTaken, selectGift } from "../src/gifts.ts";
 import { migrate } from "../src/migrate.ts";
 import { GIFTS } from "../src/seed.ts";
 import { buildApp } from "../src/server.ts";
@@ -565,6 +565,57 @@ describe("manager page", () => {
       assert.equal((await app.inject({ url: `/manager/export/${t}.csv`, cookies })).statusCode, 200, t);
     }
     assert.equal((await app.inject({ url: "/manager/export/pg_shadow.csv", cookies })).statusCode, 404);
+  });
+
+  test("a ceo sees every selection and reverses a handout, after a confirm step (request 40)", async () => {
+    await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
+    const ceo = await login({ kind: "staff", email: "chief@aguda.org.il" });
+    await selectGift(ids[0], 2);
+    await selectGift(ids[1], 3);
+    await markTaken(ids[0]);
+    assert.match((await app.inject({ url: "/manager", cookies: ceo })).body, /href="\/manager\/gifts"/);
+
+    const list = (await app.inject({ url: "/manager/gifts", cookies: ceo })).body;
+    assert.equal(list.split("<tr><td>").length - 1, 2, "both selections");
+    assert.match(list, /נמסרה ב־/);
+    assert.match(list, /נבחרה/);
+    assert.equal(list.split('action="/manager/gifts/unmark"').length - 1, 1, "a button only for the handout");
+
+    const confirm = await app.inject({ method: "POST", url: "/manager/gifts/unmark", cookies: ceo, ...form({ national_id: ids[0] }) });
+    assert.match(confirm.body, /ביטול מסירה/);
+    assert.ok((await student(ids[0])).gift_taken_at, "the confirm page changes nothing");
+
+    const done = await app.inject({ method: "POST", url: "/manager/gifts/unmark", cookies: ceo, ...form({ national_id: ids[0], confirm: "1" }) });
+    assert.equal(done.headers.location, "/manager/gifts?done=unmarked");
+    const s = await student(ids[0]);
+    assert.equal(s.gift_taken_at, null);
+    assert.equal(s.gift_id, 2, "the selection stays");
+    assert.deepEqual(s.interactions.map((i: { type: string }) => i.type), ["gift_collection", "gift_collection_reversed"]);
+    assert.equal((await gift(2)).given_count, 0);
+    assert.equal((await gift(2)).requested_count, 1);
+    assert.deepEqual(await counterDrift(), []);
+
+    // A second reversal does nothing; the desk can hand the gift over again.
+    const again = await app.inject({ method: "POST", url: "/manager/gifts/unmark", cookies: ceo, ...form({ national_id: ids[0], confirm: "1" }) });
+    assert.equal(again.headers.location, "/manager/gifts?error=not_taken");
+    assert.equal((await gift(2)).given_count, 0);
+    const card = await app.inject({ method: "POST", url: "/staff/lookup", cookies: await asStaff(), ...form({ national_id: ids[0] }) });
+    assert.match(card.body, /ביטול מסירה:/);
+    assert.match(card.body, /action="\/staff\/take"/);
+    assert.equal((await markTaken(ids[0])).ok, true);
+    assert.equal((await gift(2)).given_count, 1);
+  });
+
+  test("only a ceo sees the selections or reverses a handout", async () => {
+    await selectGift(ids[0], 2);
+    await markTaken(ids[0]);
+    for (const cookies of [await asManager(), await asStaff()]) {
+      assert.equal((await app.inject({ url: "/manager/gifts", cookies })).statusCode, 403);
+      const res = await app.inject({ method: "POST", url: "/manager/gifts/unmark", cookies, ...form({ national_id: ids[0], confirm: "1" }) });
+      assert.equal(res.statusCode, 403);
+    }
+    assert.ok((await student(ids[0])).gift_taken_at);
+    assert.doesNotMatch((await app.inject({ url: "/manager", cookies: await asManager() })).body, /href="\/manager\/gifts"/);
   });
 
   test("the database refuses a role outside the three", async () => {
