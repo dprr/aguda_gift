@@ -42,7 +42,8 @@ beforeEach(async () => {
     ('har@aguda.org.il', 'worker', 'הר הצופים'),
     ('givat@aguda.org.il', 'worker', 'גבעת רם'),
     ('harboss@aguda.org.il', 'manager', 'הר הצופים'),
-    ('nocampus@aguda.org.il', 'worker', NULL),
+    ('allcampus@aguda.org.il', 'worker', NULL),
+    ('allboss@aguda.org.il', 'manager', NULL),
     ('chief@aguda.org.il', 'ceo', NULL)`);
   app = await buildApp({
     google: noGoogle,
@@ -142,10 +143,41 @@ describe("the desk sees its own campus only", () => {
     assert.ok((await student(ids[0])).gift_taken_at);
   });
 
-  test("a worker with no campus is told so, and sees no student", async () => {
-    const cookies = await asStaff("nocampus@aguda.org.il");
-    assert.match((await app.inject({ url: "/staff", cookies })).body, /אין לך קמפוס ברשימת הצוות/);
-    assert.doesNotMatch((await lookup(cookies, ids[0])).body, /<dt>/);
+  test("a worker with no campus serves every campus (request 45)", async () => {
+    await setCampuses(ids[0], ["רחובות"]);
+    await selectGift(ids[0], 1);
+    const cookies = await asStaff("allcampus@aguda.org.il");
+    const desk = (await app.inject({ url: "/staff", cookies })).body;
+    assert.match(desk, /allcampus@aguda\.org\.il<\/bdi> · כל הקמפוסים/);
+    assert.match(desk, /<th>קמפוס<\/th>/, "the stock of every campus");
+    assert.match((await lookup(cookies, ids[0])).body, /action="\/staff\/take"/);
+    await app.inject({ method: "POST", url: "/staff/take", cookies, ...form({ national_id: ids[0] }) });
+    assert.ok((await student(ids[0])).gift_taken_at);
+  });
+
+  test("an all-campus manager adds a worker to any campus, or to all", async () => {
+    const cookies = await asStaff("allboss@aguda.org.il");
+    const add = (body: Record<string, string>) => app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form(body) });
+    assert.equal((await add({ email: "a@aguda.org.il", role: "worker", campus: "רחובות" })).headers.location, "/manager?done=added_worker");
+    assert.equal((await add({ email: "b@aguda.org.il", role: "worker", campus: "" })).headers.location, "/manager?done=added_worker");
+    assert.equal((await add({ email: "c@aguda.org.il", role: "worker", campus: "ירושלים" })).headers.location, "/manager?error=invalid_campus");
+    const campuses = (await pool.query("SELECT email, campus FROM staff WHERE email IN ('a@aguda.org.il', 'b@aguda.org.il') ORDER BY email")).rows;
+    assert.deepEqual(campuses, [{ email: "a@aguda.org.il", campus: "רחובות" }, { email: "b@aguda.org.il", campus: null }]);
+    const page = (await app.inject({ url: "/manager", cookies })).body;
+    assert.match(page, /<select name="campus"><option value="">כל הקמפוסים<\/option>/);
+    assert.match(page, /givat@aguda\.org\.il/, "sees every campus's staff");
+    await app.inject({ method: "POST", url: "/manager/stock", cookies, ...form({ gift_id: "2", campus: "עין כרם", starting_inventory: "40" }) });
+    assert.equal((await gift(2, "עין כרם")).starting_inventory, 40);
+  });
+
+  test("a one-campus manager cannot add a worker to all campuses", async () => {
+    const res = await app.inject({
+      method: "POST", url: "/manager/staff/add", cookies: await asStaff("harboss@aguda.org.il"),
+      ...form({ email: "d@aguda.org.il", role: "worker", campus: "" }),
+    });
+    assert.equal(res.headers.location, "/manager?done=added_worker");
+    assert.equal((await pool.query("SELECT campus FROM staff WHERE email = 'd@aguda.org.il'")).rows[0].campus, "הר הצופים");
+    assert.doesNotMatch((await app.inject({ url: "/manager", cookies: await asStaff("harboss@aguda.org.il") })).body, /<select name="campus">/);
   });
 
   test("the desk stock shows the own campus; a ceo sees every campus", async () => {
@@ -185,9 +217,9 @@ describe("staff and stock per campus", () => {
   test("a ceo names the campus, and moves a person to another campus", async () => {
     const cookies = await asStaff("chief@aguda.org.il");
     const add = (body: Record<string, string>) => app.inject({ method: "POST", url: "/manager/staff/add", cookies, ...form(body) });
-    assert.equal((await add({ email: "x@aguda.org.il", role: "worker" })).headers.location, "/manager?error=invalid_campus");
-    assert.equal((await add({ email: "nocampus@aguda.org.il", role: "worker", campus: "עין כרם" })).headers.location, "/manager?done=moved");
-    assert.equal((await pool.query("SELECT campus FROM staff WHERE email = 'nocampus@aguda.org.il'")).rows[0].campus, "עין כרם");
+    assert.equal((await add({ email: "x@aguda.org.il", role: "worker", campus: "ירושלים" })).headers.location, "/manager?error=invalid_campus");
+    assert.equal((await add({ email: "allcampus@aguda.org.il", role: "worker", campus: "עין כרם" })).headers.location, "/manager?done=moved");
+    assert.equal((await pool.query("SELECT campus FROM staff WHERE email = 'allcampus@aguda.org.il'")).rows[0].campus, "עין כרם");
   });
 
   test("a manager sets their own campus's stock only; a ceo sets any campus", async () => {

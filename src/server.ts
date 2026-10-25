@@ -291,8 +291,8 @@ export async function buildApp(options: AppOptions) {
   };
   const staffRole = (request: FastifyRequest) => (request as Authed).role ?? "worker";
   const actor = (request: FastifyRequest): Actor => (request as Authed).staff!;
-  /** Request 41: the campus a staff member sees, or null for a ceo, who sees every campus. */
-  const scope = (request: FastifyRequest) => (actor(request).role === "ceo" ? null : actor(request).campus);
+  /** Requests 41 and 45: the campus a staff member sees; null means every campus. */
+  const scope = (request: FastifyRequest) => actor(request).campus;
   const html = (reply: FastifyReply, body: string) => noStore(reply).type("text/html").send(body);
 
   // ---- student ------------------------------------------------------------------------
@@ -397,8 +397,7 @@ export async function buildApp(options: AppOptions) {
   const otherCampus = (request: FastifyRequest, s: StudentView): Notice | null => {
     const mine = scope(request);
     const theirs = s.true_campus;
-    if (actor(request).role === "ceo" || (mine && theirs === mine)) return null;
-    if (!mine) return { kind: "error", text: T.staff.noOwnCampus };
+    if (mine === null || theirs === mine) return null;
     if (!theirs) return { kind: "error", text: T.staff.noStudentCampus };
     return { kind: "warn", text: `${isFemale(s.gender) ? T.staff.otherCampusFemale : T.staff.otherCampus} ${esc(theirs)}.` };
   };
@@ -517,7 +516,7 @@ export async function buildApp(options: AppOptions) {
         alerts: staffRole(request) === "ceo" ? await staffAlerts() : [],
         // Request 41: a manager sees their own campus; a ceo sees every campus.
         staff: await listStaff(scope(request)),
-        gifts: scope(request) === null && staffRole(request) !== "ceo" ? [] : await listGifts(scope(request)),
+        gifts: await listGifts(scope(request)),
         message,
       }));
     },
@@ -545,8 +544,9 @@ export async function buildApp(options: AppOptions) {
     "/manager/stock",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      // Request 41: a manager sets their own campus's stock; a ceo names the campus.
-      const campus = staffRole(request) === "ceo" ? request.body?.campus : actor(request).campus;
+      // Requests 41 and 45: a one-campus manager sets that campus's stock; anyone with all
+      // campuses names the campus.
+      const campus = actor(request).campus ?? request.body?.campus;
       if (!isCampus(campus)) return reply.redirect("/manager?error=invalid_campus");
       const result = await setStock(Number(request.body?.gift_id), campus, request.body?.starting_inventory ?? "");
       if (result.ok) return reply.redirect("/manager?done=stock");

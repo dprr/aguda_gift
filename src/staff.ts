@@ -16,7 +16,7 @@ import { pool, Rollback, transaction } from "./db.ts";
 export type Role = "worker" | "manager" | "ceo";
 export const RANK: Record<Role, number> = { worker: 0, manager: 1, ceo: 2 };
 const isRole = (value: string): value is Role => value in RANK;
-/** Request 41: a worker or a manager has one campus; a ceo has none (every campus). */
+/** Request 41: a staff member's campus. Null means all campuses (request 45); a ceo always has null. */
 export type StaffMember = { email: string; role: Role; campus: Campus | null };
 /** The person acting, as the session and the staff table give them. */
 export type Actor = StaffMember;
@@ -59,7 +59,7 @@ export type AddStaffResult =
   | {
       ok: false;
       reason: "invalid" | "wrong_domain" | "exists" | "higher" | "invalid_role" | "forbidden_role"
-        | "invalid_campus" | "no_campus" | "other_campus";
+        | "invalid_campus" | "other_campus";
     };
 
 /** Request 32: a person acts only on roles strictly below their own. */
@@ -81,10 +81,10 @@ export async function addStaff(
 ): Promise<AddStaffResult> {
   if (!isRole(role)) return { ok: false, reason: "invalid_role" };
   if (!mayManage(by.role, role)) return { ok: false, reason: "forbidden_role" };
-  // A manager's staff always join the manager's own campus; a ceo names the campus.
-  const target = by.role === "ceo" ? campus : by.campus;
-  if (by.role !== "ceo" && !by.campus) return { ok: false, reason: "no_campus" };
-  if (!isCampus(target)) return { ok: false, reason: "invalid_campus" };
+  // A one-campus manager's staff join that campus. A ceo or an all-campus manager names
+  // the campus, or leaves it empty for all campuses (request 45).
+  const target = by.campus ?? (campus === "" || campus === undefined ? null : campus);
+  if (target !== null && !isCampus(target)) return { ok: false, reason: "invalid_campus" };
   const checked = checkEmail(email, staffDomains);
   if (!checked.ok) return checked;
 
@@ -96,7 +96,7 @@ export async function addStaff(
       return { ok: true, done: role === "manager" ? "added_manager" : "added_worker" } as AddStaffResult;
     }
     if (!mayManage(by.role, old.role) || RANK[role] < RANK[old.role]) return { ok: false, reason: "higher" } as AddStaffResult;
-    if (by.role !== "ceo" && old.campus !== by.campus) return { ok: false, reason: "other_campus" } as AddStaffResult;
+    if (by.campus !== null && old.campus !== by.campus) return { ok: false, reason: "other_campus" } as AddStaffResult;
     if (old.role === role && old.campus === target) return { ok: false, reason: "exists" } as AddStaffResult;
     await db.query("UPDATE staff SET role = $2, campus = $3 WHERE email = $1", [checked.email, role, target]);
     return { ok: true, done: old.role !== role ? "promoted_manager" : "moved" } as AddStaffResult;
@@ -116,8 +116,8 @@ export async function removeStaff(email: string, by: Actor): Promise<RemoveStaff
   const r = await pool.query(
     `DELETE FROM staff WHERE email = $1
         AND (CASE role WHEN 'worker' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END) < $2
-        AND ($3 = 'ceo' OR campus = $4)`,
-    [e, RANK[by.role], by.role, by.campus],
+        AND ($3::text IS NULL OR campus = $3)`,
+    [e, RANK[by.role], by.campus],
   );
   if (r.rowCount) return { ok: true };
   return { ok: false, reason: (await roleOf(e)) ? "forbidden" : "not_found" };
@@ -187,7 +187,7 @@ export async function setStock(giftId: number, campus: string, value: string): P
 
 // ---- command line -----------------------------------------------------------------------
 //   npm run staff                                list the staff
-//   npm run staff -- manager <email> <campus>    add a manager of a campus, or set an existing person to it
+//   npm run staff -- manager <email> [campus]    add a manager of a campus (none: all campuses), or set an existing person to it
 //   npm run staff -- ceo <email>                 add a ceo (every campus), or set an existing person to it
 //   npm run staff -- remove <email>              remove anyone
 // On the server: bash /home/opc/aguda/app/deploy/server.sh staff ceo <email>
@@ -201,17 +201,17 @@ if (import.meta.main) {
     if (!checked.ok) {
       console.error(`refused: ${checked.reason}. Use an address in ${domains.join(" or ")}`);
       code = 1;
-    } else if (command === "manager" && !isCampus(campus)) {
-      console.error(`refused: a manager needs a campus: ${["גבעת רם", "הר הצופים", "עין כרם", "רחובות"].join(" | ")}`);
+    } else if (command === "manager" && campus !== undefined && !isCampus(campus)) {
+      console.error(`refused: the campus must be one of: ${["גבעת רם", "הר הצופים", "עין כרם", "רחובות"].join(" | ")}`);
       code = 1;
     } else {
-      const target = command === "ceo" ? null : campus;
+      const target = command === "ceo" ? null : (campus ?? null);
       await pool.query(
         `INSERT INTO staff (email, role, campus) VALUES ($1, $2, $3)
          ON CONFLICT (email) DO UPDATE SET role = excluded.role, campus = excluded.campus`,
         [checked.email, command, target],
       );
-      console.log(`${checked.email} is a ${command}${target ? ` of ${target}` : ""}`);
+      console.log(`${checked.email} is a ${command} of ${target ?? "all campuses"}`);
     }
   } else if (command === "remove") {
     const r = await pool.query("DELETE FROM staff WHERE email = $1", [email.trim().toLowerCase()]);
@@ -220,7 +220,7 @@ if (import.meta.main) {
   } else if (command === undefined) {
     for (const m of await listStaff()) console.log(`${m.role}\t${m.campus ?? "-"}\t${m.email}`);
   } else {
-    console.error("usage: npm run staff -- [manager <email> <campus> | ceo <email> | remove <email>]");
+    console.error("usage: npm run staff -- [manager <email> [campus] | ceo <email> | remove <email>]");
     code = 1;
   }
   await pool.end();

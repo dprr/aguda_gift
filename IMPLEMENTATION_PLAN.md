@@ -393,12 +393,13 @@ Four campuses: גבעת רם, הר הצופים, עין כרם, רחובות (`s
   without a campus; such a student cannot select a gift.
 - **Students never move campus** (owner's decision), so selection, handout, deletion, and
   reversal all use the stock of `true_campus`.
-- **`staff.campus`**: a worker's or a manager's campus; null for a ceo, who sees every
-  campus. A worker or manager acts only on students whose true campus is their own. For any other student the desk shows only that student's campus,
-  and the server refuses a handout or a deletion. A student of another campus is not a
-  wrong ID (§4.3). A manager adds workers to their own campus, removes only those, and sets
-  only their campus's stock. A ceo names the campus, and moves a person by adding them
-  again with another campus. Staff without a campus see no student until a ceo sets one.
+- **`staff.campus`**: a staff member's campus. **Empty means all campuses** (request 45),
+  for every role; a ceo always has it empty. A one-campus worker or manager acts only on
+  students whose true campus is their own: for any other student the desk shows only that
+  student's campus, and the server refuses a handout or a deletion. A student of another
+  campus is not a wrong ID (§4.3). A one-campus manager adds workers to their own campus,
+  removes only those, and sets only their campus's stock. A ceo or an all-campus manager
+  names the campus, or leaves it empty for all, and moves a person by adding them again.
 
 ### 4.6 `gift_stock`
 
@@ -825,6 +826,7 @@ document is a wish list, and a section in it is not a request.
 | 42 | The true campus is the first campus in the university's record order, not in alphabetical order |
 | 43 | The survey shows exactly 2 lines of media links: Aguda's general links and the true campus's links. Every rule uses `true_campus`, never the full campus list |
 | 44 | The dorm list in the survey is the owner's list of 2026-10-23, and only that list |
+| 45 | A staff member with no campus (–) belongs to all campuses: they see and serve every campus, and a manager with no campus adds workers to any campus, or to all |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

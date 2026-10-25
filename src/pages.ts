@@ -162,7 +162,6 @@ export const T = {
     otherCampus: "הסטודנט שייך לקמפוס אחר. הפנה אותו לעמדת החלוקה בקמפוס",
     otherCampusFemale: "הסטודנטית שייכת לקמפוס אחר. הפנה אותה לעמדת החלוקה בקמפוס",
     noStudentCampus: "אין קמפוס ברשימה למספר הזהות הזה. פנה למנכ\"ל.",
-    noOwnCampus: "אין לך קמפוס ברשימת הצוות, ולכן אינך יכול לטפל בסטודנטים. פנה למנכ\"ל.",
     drift: "שגיאה: המונים אינם תואמים לנתוני הסטודנטים. דווח למפתח.",
     manage: "נהל עובדים ומלאי",
     /** Request 30: any staff member lets a student start again. */
@@ -249,8 +248,7 @@ export const T = {
       remove_forbidden: "אתה יכול להסיר רק איש צוות בתפקיד נמוך מהתפקיד שלך.",
       remove_self: "אינך יכול להסיר את עצמך.",
       invalid_role: "התפקיד אינו תקין.",
-      invalid_campus: "בחר קמפוס.",
-      no_campus: "אין לך קמפוס ברשימת הצוות. פנה למנכ\"ל.",
+      invalid_campus: "הקמפוס אינו תקין.",
       other_campus: "העובד הזה שייך לקמפוס אחר.",
       forbidden_role: "אתה יכול לתת רק תפקיד נמוך מהתפקיד שלך.",
       invalid_stock: "הזן מספר שלם, 0 או יותר.",
@@ -751,7 +749,7 @@ export function staffPage(options: {
 }): string {
   const { email, role, campus, stats, student, searched, message } = options;
   const giftNames = stats.names;
-  const allCampuses = role === "ceo";
+  const allCampuses = campus === null; // request 45: no campus means every campus
 
   const result = student
     ? studentCard(student, giftNames)
@@ -771,9 +769,8 @@ export function staffPage(options: {
   const drift = stats.drift.length ? `<p class="error">${T.staff.drift}</p>` : "";
 
   return layout(
-    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)} · ${esc(allCampuses ? T.staff.allCampuses : campus ?? "—")}</span>${logoutForm()}</div>
+    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)} · ${esc(campus ?? T.staff.allCampuses)}</span>${logoutForm()}</div>
 ${role !== "worker" ? `<p><a href="/manager">${T.staff.manage}</a></p>` : ""}
-${!allCampuses && !campus ? `<p class="error">${T.staff.noOwnCampus}</p>` : ""}
 ${drift}
 <form method="post" action="/staff/lookup">
   <label>${T.staff.search}<input name="national_id" dir="ltr" inputmode="numeric" autofocus autocomplete="off"></label>
@@ -846,7 +843,7 @@ export function managerPage(options: {
   message?: Notice;
 }): string {
   const { email, role, campus, extraQuestions, alerts, staff, gifts, message } = options;
-  const allCampuses = role === "ceo";
+  const allCampuses = campus === null; // request 45: no campus means every campus
   const M = T.manager;
   // Request 32: only roles below the viewer's own.
   const roleOptions = (["worker", "manager", "ceo"] as const)
@@ -885,7 +882,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
   // where this viewer may remove (request 32): strictly below their own level.
   const staffRows = staff
     .map(
-      (m) => `<tr><td>${ltr(m.email)}</td><td>${M.roles[m.role]}</td><td>${esc(m.campus ?? (m.role === "ceo" ? T.staff.allCampuses : "—"))}</td><td>${
+      (m) => `<tr><td>${ltr(m.email)}</td><td>${M.roles[m.role]}</td><td>${esc(m.campus ?? T.staff.allCampuses)}</td><td>${
         mayManage(role, m.role) && m.email !== email
           ? `<form method="post" action="/manager/staff/remove">
   <input type="hidden" name="email" value="${esc(m.email)}">
@@ -921,8 +918,8 @@ ${notice(message)}
   <label>${M.newStaff}<input name="email" type="email" dir="ltr" autocomplete="off" required></label>
   <label>${M.role} <select name="role">${roleOptions}</select></label>
   ${allCampuses
-    ? `<label>${M.campus} <select name="campus" required><option value="">—</option>${CAMPUSES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>`
-    : `<p class="hint">${M.joinsYourCampus} ${esc(campus ?? "—")}</p>`}
+    ? `<label>${M.campus} <select name="campus"><option value="">${T.staff.allCampuses}</option>${CAMPUSES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>`
+    : `<p class="hint">${M.joinsYourCampus} ${esc(campus)}</p>`}
   <button class="button">${M.add}</button>
 </form>
 </section>
