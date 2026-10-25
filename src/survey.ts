@@ -66,7 +66,7 @@ const DORMS = [
   ] },
   { label: "רחובות", options: [
     { value: "faculty_dorms", label: "מעונות הפקולטה" },
-    { value: "shikun_binui", label: "מעונות שיכון ובינוי" },
+    { value: "shikun_binui", label: "שיכון ובינוי (לא תחת האוניברסיטה)" },
   ] },
 ];
 
