@@ -104,6 +104,7 @@ describe("student page", () => {
 
     const page = await app.inject({ url: "/student", cookies });
     assert.equal(count(page.body, "/student/confirm?gift="), 0, "no gift can be chosen any more");
+    assert.match(page.body, /המתנה שמורה עבורך רק להיום/, "request 48");
     assert.match(page.body, /תיק בד/);
     assert.equal((await student(ids[0])).gift_id, 3);
   });

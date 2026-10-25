@@ -56,8 +56,8 @@ export const T = {
     registerFemale: "כדי להירשם לאגודה, עקבי אחרי השלבים בתמונה. לחצי על התמונה כדי להגדיל אותה.",
     registerAlt: "הוראות הרשמה לאגודה דרך אפליקציית MyHuji ודרך המידע האישי באתר האוניברסיטה",
     /** Request 47: a link at the top of the non-member page. */
-    notMemberPost: "צפה בפוסט שלנו באינסטגרם",
-    notMemberPostFemale: "צפי בפוסט שלנו באינסטגרם",
+    notMemberPost: "צפה בפוסט שלנו באינסטגרם שמסביר איך להירשם לאגודה",
+    notMemberPostFemale: "צפי בפוסט שלנו באינסטגרם שמסביר איך להירשם לאגודה",
     unknownMemberFemale: "אין לנו מידע על החברות שלך באגודה. פני למשרד האגודה.",
     choose: "בחירת מתנה",
     chooseHint: "בחר מתנה אחת בלבד. הבחירה סופית.",
@@ -73,6 +73,8 @@ export const T = {
     back: "חזור",
     backFemale: "חזרי",
     yourGift: "המתנה שלך",
+    /** Request 48: a note after the selection. The app itself keeps the selection (request 7). */
+    reservedToday: "המתנה שמורה עבורך רק להיום.",
     collectHint: "אסוף את המתנה בעמדת חלוקה של האגודה, והבא תעודת סטודנט.",
     collectHintFemale: "אספי את המתנה בעמדת חלוקה של האגודה, והביאי תעודת סטודנט.",
     received: "קיבלת את המתנה",
@@ -499,6 +501,7 @@ ${notice(message)}`;
     return layout(`${head}
 <div class="card"><p>${T.student.yourGift}</p><p class="big">${esc(s.gift_name)}</p>
 <p class="hint">${f ? T.student.chooseHintFemale : T.student.chooseHint}</p>${lapsed}
+<p class="warn">${T.student.reservedToday}</p>
 <p>${f ? T.student.collectHintFemale : T.student.collectHint}</p>
 ${s.member === true ? `<a class="button secondary" href="/student/received">${f ? T.student.markReceivedFemale : T.student.markReceived}</a>` : ""}</div>`);
   }

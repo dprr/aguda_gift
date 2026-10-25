@@ -829,6 +829,7 @@ document is a wish list, and a section in it is not a request.
 | 45 | A staff member with no campus (–) belongs to all campuses: they see and serve every campus, and a manager with no campus adds workers to any campus, or to all |
 | 46 | A login refused with "לא מצאנו אותך ברשימת האוניברסיטה" also shows how to register (`img/how_to_register.jpg`) |
 | 47 | The non-member page links, at the top, to the owner's Instagram post |
+| 48 | After the selection, the student's gift card says "המתנה שמורה עבורך רק להיום". A note only: the selection itself still never expires (request 7) |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
