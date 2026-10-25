@@ -41,6 +41,7 @@ const SESSION_COOKIE = "session";
 const OAUTH_COOKIE = "oauth";
 const SESSION_HOURS = 12; // one desk shift
 const IMG_DIR = join(import.meta.dirname, "..", "img");
+const FONT_DIR = join(import.meta.dirname, "..", "fonts");
 
 export async function buildApp(options: AppOptions) {
   const fullSurvey = options.survey ?? SURVEY;
@@ -80,7 +81,7 @@ export async function buildApp(options: AppOptions) {
     app.addHook("onSend", async (_request, reply, payload) => {
       const type = String(reply.getHeader("content-type") ?? "");
       if (!type.startsWith("text/html") || typeof payload !== "string") return payload;
-      return payload.replace("<body>", `<body>${demoBanner}`);
+      return payload.replace(/<body([^>]*)>/, (_m, attrs) => `<body${attrs}>${demoBanner}`);
     });
   }
 
@@ -119,19 +120,30 @@ export async function buildApp(options: AppOptions) {
   const refuse = (reply: FastifyReply, reason: RefusalReason, door: Door = "student") =>
     reply.redirect(`${loginUrl(door)}?error=${reason}`);
 
-  // ---- gift photos --------------------------------------------------------------------
+  // ---- static files: photos, logos, fonts -------------------------------------------
 
-  // Read once, at start. A request names a file from this map or gets 404, so it can
-  // never reach a path outside img/.
-  const images = new Map<string, Buffer>();
-  for (const file of await readdir(IMG_DIR).catch(() => [])) {
-    if (/\.jpe?g$/i.test(file)) images.set(file, await readFile(join(IMG_DIR, file)));
-  }
-  app.get<{ Params: { file: string } }>("/img/:file", async (request, reply) => {
-    const image = images.get(request.params.file);
-    if (!image) return reply.code(404).send("Not found");
-    return reply.type("image/jpeg").header("cache-control", "public, max-age=86400").send(image);
-  });
+  // Read once, at start. A request names a file from these maps or gets 404, so it can
+  // never reach a path outside img/ or fonts/. Only the listed types are served.
+  const TYPES: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+    svg: "image/svg+xml", woff2: "font/woff2",
+  };
+  const serveDir = async (prefix: string, dir: string) => {
+    const files = new Map<string, { body: Buffer; type: string }>();
+    for (const file of await readdir(dir).catch(() => [])) {
+      const type = TYPES[file.split(".").pop()!.toLowerCase()];
+      if (type) files.set(file, { body: await readFile(join(dir, file)), type });
+    }
+    app.get<{ Params: { file: string } }>(`${prefix}/:file`, async (request, reply) => {
+      const file = files.get(request.params.file);
+      if (!file) return reply.code(404).send("Not found");
+      // An SVG is our own logo; it may still never run a script.
+      if (file.type === "image/svg+xml") reply.header("content-security-policy", "script-src 'none'");
+      return reply.type(file.type).header("cache-control", "public, max-age=86400").send(file.body);
+    });
+  };
+  await serveDir("/img", IMG_DIR);
+  await serveDir("/fonts", FONT_DIR);
 
   // ---- the two login pages (request 24) ----------------------------------------------
 

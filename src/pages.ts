@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, SelectionView, StaffStats, StudentView } from "./queries.ts";
-import { CAMPUSES } from "./campus.ts";
+import { AGUDA_LOGO, CAMPUSES, logoOf } from "./campus.ts";
 import { mayManage, type Role } from "./staff.ts";
 import { AGUDA_SOCIAL, CAMPUS_SOCIAL, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
 
@@ -287,103 +287,126 @@ export function esc(value: unknown): string {
 /** Plan §7: isolate numbers and addresses inside Hebrew text, or they render reversed. */
 export const ltr = (value: unknown) => `<bdi dir="ltr">${esc(value)}</bdi>`;
 
-function layout(body: string, wide = false): string {
+function layout(body: string, wide = false, brand = false): string {
   return `<!doctype html>
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#007554">
 <title>${T.title}</title>
 <style>
-  /* Dark theme. Every color is here, so a change of theme edits only this block. */
+  /*
+   * The Aguda theme, from the owner's Figma design (2026-10-25): cream pages, Aguda green
+   * #007554, the Heebo font (self-hosted in fonts/, SIL OFL), and green frames whose title
+   * sits in a green tab on the top edge. Every color is here, so a change of theme edits
+   * only this block.
+   */
+  @font-face { font-family: "Heebo"; font-weight: 100 900; font-display: swap;
+               src: url("/fonts/heebo-hebrew.woff2") format("woff2");
+               unicode-range: U+0307-0308, U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F; }
+  @font-face { font-family: "Heebo"; font-weight: 100 900; font-display: swap;
+               src: url("/fonts/heebo-latin.woff2") format("woff2");
+               unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2212, U+FEFF; }
   :root {
-    color-scheme: dark;            /* dark form controls, checkboxes, and scrollbars */
-    --bg: #000;                    /* the page */
-    --surface: #121316;            /* the main panel */
-    --raised: #1b1c20;             /* inputs, photos, secondary buttons */
-    --border: #34363c;
-    --text: #fff;
-    --muted: #a1a1aa;              /* hints and labels */
-    --green: #1f5f3f;              /* buttons, as in the light theme */
-    --green-focus: #4ade80;
-    --link: #7cc4ff;
-    --link-visited: #c4a7ff;
-    --ok-bg: #0f2e1f;    --ok: #7ee2a8;
-    --warn-bg: #3a2a0a;  --warn: #ffc46b;
-    --error-bg: #3b1214; --error: #ff9b9b;
-    --dev: #ff6b6b;                /* the development login frame */
+    color-scheme: light;
+    --cream: #f9f6e7;              /* the page */
+    --white: #fff;                 /* cards and inputs */
+    --green: #007554;              /* buttons, titles, frames, text */
+    --green-dark: #00573f;         /* hover */
+    --gray: #909090;               /* a disabled button */
+    --muted: #4f6b5f;              /* hints and labels */
+    --line: #007554;
+    --ok-bg: #dae6d4;    --ok: #00573f;
+    --warn-bg: #fdf0d5;  --warn: #7a4a00;
+    --error-bg: #fbe3e1; --error: #9c1f1f;
+    --dev: #c33;                   /* the development login frame */
   }
-  body { font-family: system-ui, "Segoe UI", Arial, sans-serif; background: var(--bg);
-         color: var(--text); margin: 0; padding: 2rem 1rem; }
-  main { max-width: 28rem; margin-inline: auto; background: var(--surface); border-radius: 12px;
-         padding: 1.5rem; border: 1px solid var(--border); }
-  a { color: var(--link); }
-  a:visited { color: var(--link-visited); }
-  :focus-visible { outline: 2px solid var(--green-focus); outline-offset: 2px; }
-  h1 { margin-block-start: 0; font-size: 1.5rem; }
+  body { font-family: "Heebo", system-ui, Arial, sans-serif; background: var(--cream);
+         color: var(--green); margin: 0; padding: 1.5rem 1rem; line-height: 1.45; }
+  body.brand { background: var(--green); }
+  main { max-width: 28rem; margin-inline: auto; }
+  body.brand main { background: var(--white); padding: 1.5rem; margin-block-start: 1.5rem; }
+  main.wide { max-width: 46rem; }
+  a { color: var(--green); font-weight: 600; }
+  :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+  h1 { margin: 0; font-size: 1.9rem; font-weight: 800; line-height: 1.1; }
+  h2 { font-weight: 800; }
+  .brand h1 { font-size: 2.6rem; text-align: center; margin-block: 0.5rem 1rem; }
+  img.logo { width: 2.75rem; height: 2.75rem; flex: none; }
+  .brand-logo { display: block; width: 4.5rem; height: 4.5rem; margin: 0 auto; }
   .button, .button:visited { display: block; text-align: center; background: var(--green); color: #fff;
-            border: 0; border-radius: 8px; padding: 0.9rem; font: inherit;
-            font-weight: 600; text-decoration: none; width: 100%; box-sizing: border-box;
+            border: 0; border-radius: 3px; padding: 0.75rem; font: inherit;
+            font-weight: 700; text-decoration: none; width: 100%; box-sizing: border-box;
             cursor: pointer; }
+  .button:hover { background: var(--green-dark); }
   .hint { color: var(--muted); font-size: 0.9rem; }
-  .error { background: var(--error-bg); color: var(--error); border-radius: 8px; padding: 0.8rem;
+  .error { background: var(--error-bg); color: var(--error); border-radius: 3px; padding: 0.8rem;
            font-weight: 600; }
-  fieldset { border: 1px dashed var(--dev); border-radius: 8px; margin-block-start: 2rem; }
+  fieldset { border: 1px dashed var(--dev); border-radius: 3px; margin-block-start: 2rem; }
   legend { color: var(--dev); font-weight: 600; }
-  input, select, textarea { background: var(--raised); color: var(--text);
-                            border: 1px solid var(--border); border-radius: 6px; }
+  input, select, textarea { background: var(--white); color: #1b1b1f;
+                            border: 1px solid var(--green); border-radius: 3px; }
   input { font: inherit; padding: 0.5rem; width: 100%; box-sizing: border-box;
           margin-block: 0.3rem 0.6rem; }
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--green); }
   select { font: inherit; padding: 0.3rem; }
-  main.wide { max-width: 46rem; }
-  .ok { background: var(--ok-bg); color: var(--ok); border-radius: 8px; padding: 0.8rem;
+  .ok { background: var(--ok-bg); color: var(--ok); border-radius: 3px; padding: 0.8rem;
         font-weight: 600; }
-  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 0.8rem;
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 3px; padding: 0.8rem;
           font-weight: 600; }
+  /* A gift card: the name in a green tab on the frame's top edge, as in the design. */
   .gifts { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-           gap: 0.75rem; }
-  .gift { border: 2px solid var(--border); border-radius: 10px; padding: 0.9rem;
-          display: flex; flex-direction: column; gap: 0.4rem; }
+           gap: 1.75rem 0.75rem; margin-block-start: 1.5rem; }
+  .gift { border: 1.5px solid var(--line); padding: 1.1rem 0.75rem 0.75rem; background: var(--cream);
+          display: flex; flex-direction: column; gap: 0.4rem; text-align: center; }
   .gift.out { opacity: 0.5; }
-  .gift img, .photo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px;
-                      background: var(--raised); }
+  .gift strong { align-self: center; margin-block-start: -1.8rem; background: var(--green); color: #fff;
+                 padding: 0.1rem 0.7rem; font-size: 1rem; font-weight: 700; }
+  .gift img, .photo { width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
+                      background: var(--white); }
   .photo { max-width: 16rem; display: block; }
-  img.register { width: 100%; height: auto; display: block; border-radius: 8px; }
-  .gift strong { font-size: 1.1rem; }
-  .big { font-size: 1.5rem; font-weight: 700; margin: 0.3rem 0; }
-  .button.disabled { background: #3f4247; color: var(--muted); cursor: default; }
-  .button.secondary, .button.secondary:visited { background: var(--raised); color: var(--text);
-                      border: 1px solid var(--border); margin-block-start: 0.5rem; }
-  .bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-  .bar form .button { width: auto; padding: 0.4rem 0.9rem; }
-  .button.small { width: auto; padding: 0.4rem 0.9rem; margin: 0; }
+  img.register { width: 100%; height: auto; display: block; }
+  .big { font-size: 1.5rem; font-weight: 800; margin: 0.3rem 0; }
+  .button.disabled { background: var(--gray); color: #fff; cursor: default; }
+  .button.secondary, .button.secondary:visited { background: transparent; color: var(--green);
+                      border: 1.5px solid var(--green); margin-block-start: 0.5rem; }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+         margin-block-end: 1rem; }
+  .bar h1 { flex: 1; }
+  /* Logout is small text at the top, as in the design. */
+  .bar form .button, .bar form .button:visited { width: auto; padding: 0.2rem 0.4rem; background: none;
+                     color: var(--green); border: 0; font-size: 0.9rem; text-decoration: underline; }
+  .button.small { width: auto; padding: 0.35rem 0.8rem; margin: 0; }
   form.inline { display: flex; gap: 0.5rem; align-items: center; }
   form.inline input { width: 6rem; margin: 0; }
-  .card { border: 1px solid var(--border); border-radius: 10px; padding: 1rem;
+  .card { border: 1.5px solid var(--line); background: var(--white); padding: 1rem;
           margin-block: 1rem; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; }
   dt { color: var(--muted); }
-  dd { margin: 0; font-weight: 600; }
+  dd { margin: 0; font-weight: 700; }
   table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-  th, td { border-block-end: 1px solid var(--border); padding: 0.4rem; text-align: start; }
+  th, td { border-block-end: 1px solid #c9d8cf; padding: 0.4rem; text-align: start; }
   section { margin-block-start: 1.5rem; }
-  fieldset.question { border: 1px solid var(--border); border-radius: 10px; margin-block-end: 1rem; }
-  fieldset.question legend { color: var(--text); font-weight: 600; padding-inline: 0.3rem; }
+  /* A question: a green frame, with the question in a green tab on its top edge. */
+  fieldset.question { border: 1.5px solid var(--line); border-radius: 0; margin-block: 1.75rem 1rem;
+                      background: var(--cream); padding: 0.75rem 1rem; }
+  fieldset.question legend { background: var(--green); color: #fff; font-weight: 700;
+                             padding: 0.15rem 0.6rem; }
+  fieldset.question legend .hint { color: #d7eadf; }
   .option { display: block; padding-block: 0.3rem; }
   .option input { width: auto; margin-inline-end: 0.4rem; }
   .option .follow { width: 60%; margin-block: 0; font: inherit; padding: 0.3rem; }
   /* A follow-up shows only once its own option is picked. CSS only, no JavaScript. */
   .option input:not(:checked) ~ .follow { display: none; }
   .when { display: none; margin-block-start: 0.5rem; }
-  .extra-toggle { font-weight: 600; margin-block-end: 1rem; }
+  .extra-toggle { font-weight: 700; margin-block-end: 1rem; }
   .extra { display: none; }
   form:has(.extra-toggle input:checked) .extra { display: block; }
   textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.5rem; }
 </style>
 </head>
-<body><main${wide ? ' class="wide"' : ""}>${body}</main></body>
+<body${brand ? ' class="brand"' : ""}>${brand ? `<img class="brand-logo" src="/img/${AGUDA_LOGO}" alt="אגודת הסטודנטים">` : ""}<main${wide ? ' class="wide"' : ""}>${body}</main></body>
 </html>`;
 }
 
@@ -409,7 +432,7 @@ ${error}
 ${register}
 <a class="button" href="/auth/google">${T.signIn}</a>
 <p><a href="/staff/login">${T.staffLink}</a></p>
-${dev}`);
+${dev}`, false, true);
 }
 
 /** Request 24: the staff login page, for managers and workers. */
@@ -428,7 +451,7 @@ export function staffLoginPage(options: { devLogin: boolean; error?: StaffRefusa
 ${error}
 <a class="button" href="/auth/google/staff">${T.staffSignIn}</a>
 <p><a href="/">${T.studentLink}</a></p>
-${dev}`);
+${dev}`, false, true);
 }
 
 /** Request 47: the owner's Instagram post, linked at the top of the non-member page. */
@@ -440,6 +463,10 @@ const postLink = (gender: string | null) =>
 const registerImage = (gender: string | null) =>
   `<p>${isFemale(gender) ? T.student.registerFemale : T.student.register}</p>
 <a href="/img/how_to_register.jpg" target="_blank"><img class="register" src="/img/how_to_register.jpg" alt="${T.student.registerAlt}"></a>`;
+
+/** The campus's logo in a page header; the Aguda logo for no campus or all campuses. */
+const logo = (campus: string | null | undefined) =>
+  `<img class="logo" src="/img/${logoOf(campus)}" alt="${esc(campus ?? "אגודת הסטודנטים")}">`;
 
 /** An imperative, not a verbal noun: התנתק, not התנתקות. Gendered for a known woman. */
 const logoutForm = (gender: string | null = null) =>
@@ -484,7 +511,7 @@ const notice = (n?: Notice) => (n ? `<p class="${n.kind}">${n.text}</p>` : "");
 
 export function studentPage(s: StudentView, gifts: GiftView[], message?: Notice): string {
   const f = isFemale(s.gender);
-  const head = `<div class="bar"><h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>${logoutForm(s.gender)}</div>
+  const head = `<div class="bar">${logo(s.true_campus)}<h1>${esc(s.first_name)} ${esc(s.last_name)}</h1>${logoutForm(s.gender)}</div>
 <p>${ltr(s.national_id)} · <strong>${memberLabel(s.member, s.gender)}</strong></p>
 ${notice(message)}`;
 
@@ -524,9 +551,9 @@ ${registerImage(s.gender)}`);
   const cards = gifts
     .map((g) =>
       g.selectable > 0
-        ? `<div class="gift">${photo(g)}<strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
+        ? `<div class="gift"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>${photo(g)}
 <a class="button" href="/student/confirm?gift=${g.id}">${isFemale(s.gender) ? T.student.selectFemale : T.student.select}</a></div>`
-        : `<div class="gift out">${photo(g)}<strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>
+        : `<div class="gift out"><strong>${esc(g.name)}</strong><span class="hint">${esc(g.description)}</span>${photo(g)}
 <span class="button disabled" aria-disabled="true">${T.student.soldOut}</span></div>`,
     )
     .join("\n");
@@ -650,7 +677,7 @@ ${extra.map(field).join("\n")}
     : "";
   const fields = `${main.map(field).join("\n")}\n${extraSection}`;
 
-  return layout(`<div class="bar"><h1>${T.survey.title}</h1>${logoutForm(s.gender)}</div>
+  return layout(`<div class="bar">${logo(s.true_campus)}<h1>${T.survey.title}</h1>${logoutForm(s.gender)}</div>
 <p>${female ? T.survey.introFemale : T.survey.intro}</p>
 <form method="post" action="/student/survey">
 ${fields}
@@ -791,7 +818,7 @@ export function staffPage(options: {
   const drift = stats.drift.length ? `<p class="error">${T.staff.drift}</p>` : "";
 
   return layout(
-    `<div class="bar"><h1>${T.staff.title}</h1><span class="hint">${ltr(email)} · ${esc(campus ?? T.staff.allCampuses)}</span>${logoutForm()}</div>
+    `<div class="bar">${logo(campus)}<h1>${T.staff.title}</h1><span class="hint">${ltr(email)} · ${esc(campus ?? T.staff.allCampuses)}</span>${logoutForm()}</div>
 ${role !== "worker" ? `<p><a href="/manager">${T.staff.manage}</a></p>` : ""}
 ${drift}
 <form method="post" action="/staff/lookup">
@@ -826,7 +853,7 @@ export function selectionsPage(options: { email: string; rows: SelectionView[]; 
     }</td></tr>`)
     .join("");
   return layout(
-    `<div class="bar"><h1>${M.selectionsTitle}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
+    `<div class="bar">${logo(null)}<h1>${M.selectionsTitle}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
 <p><a href="/manager">${M.title}</a></p>
 ${notice(message)}
 ${rows.length
@@ -928,7 +955,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
     .join("");
 
   return layout(
-    `<div class="bar"><h1>${M.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
+    `<div class="bar">${logo(campus)}<h1>${M.title}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
 <p><a href="/staff">${M.back}</a></p>
 ${selectionsLink}
 ${alertBox}

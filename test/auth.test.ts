@@ -316,7 +316,7 @@ describe("demo mode", () => {
   test("demo mode puts the banner on every page; normal mode never does", async () => {
     const demo = await demoApp(true, false);
     const page = await demo.inject("/");
-    assert.match(page.body, /<body><div role="alert"[^>]*>גרסת הדגמה/);
+    assert.match(page.body, /<body[^>]*><div role="alert"[^>]*>גרסת הדגמה/);
 
     const normal = await demoApp(false, false);
     assert.doesNotMatch((await normal.inject("/")).body, /גרסת הדגמה/);
