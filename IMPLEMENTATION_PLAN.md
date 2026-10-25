@@ -828,6 +828,7 @@ document is a wish list, and a section in it is not a request.
 | 44 | The dorm list in the survey is the owner's list of 2026-10-23, and only that list |
 | 45 | A staff member with no campus (–) belongs to all campuses: they see and serve every campus, and a manager with no campus adds workers to any campus, or to all |
 | 46 | A login refused with "לא מצאנו אותך ברשימת האוניברסיטה" also shows how to register (`img/how_to_register.jpg`) |
+| 47 | The non-member page links, at the top, to the owner's Instagram post |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

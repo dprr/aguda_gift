@@ -55,6 +55,9 @@ export const T = {
     register: "כדי להירשם לאגודה, עקוב אחרי השלבים בתמונה. לחץ על התמונה כדי להגדיל אותה.",
     registerFemale: "כדי להירשם לאגודה, עקבי אחרי השלבים בתמונה. לחצי על התמונה כדי להגדיל אותה.",
     registerAlt: "הוראות הרשמה לאגודה דרך אפליקציית MyHuji ודרך המידע האישי באתר האוניברסיטה",
+    /** Request 47: a link at the top of the non-member page. */
+    notMemberPost: "צפה בפוסט שלנו באינסטגרם",
+    notMemberPostFemale: "צפי בפוסט שלנו באינסטגרם",
     unknownMemberFemale: "אין לנו מידע על החברות שלך באגודה. פני למשרד האגודה.",
     choose: "בחירת מתנה",
     chooseHint: "בחר מתנה אחת בלבד. הבחירה סופית.",
@@ -423,6 +426,9 @@ ${error}
 ${dev}`);
 }
 
+/** Request 47: the owner's Instagram post, linked at the top of the non-member page. */
+const NOT_MEMBER_POST = "https://www.instagram.com/p/DecMEG_jLYt/?xtok=MXIzbmdubGYzbms3Nw==";
+
 /** Requests 37 and 46: how to register with Aguda. The image opens at full size, so a phone can zoom in. */
 const registerImage = (gender: string | null) =>
   `<p>${isFemale(gender) ? T.student.registerFemale : T.student.register}</p>
@@ -498,7 +504,8 @@ ${s.member === true ? `<a class="button secondary" href="/student/received">${f 
     if (s.member === null) {
       return layout(`${head}<p class="warn">${f ? T.student.unknownMemberFemale : T.student.unknownMember}</p>`);
     }
-    return layout(`${head}<p class="warn">${f ? T.student.notMemberFemale : T.student.notMember}</p>
+    return layout(`${head}<p><a href="${NOT_MEMBER_POST}" target="_blank" rel="noopener noreferrer">${f ? T.student.notMemberPostFemale : T.student.notMemberPost}</a></p>
+<p class="warn">${f ? T.student.notMemberFemale : T.student.notMember}</p>
 ${registerImage(s.gender)}`);
   }
 

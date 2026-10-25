@@ -132,6 +132,9 @@ describe("student page", () => {
     assert.match(page.body, /<a href="\/img\/how_to_register.jpg" target="_blank"><img class="register" src="\/img\/how_to_register.jpg" alt="[^"]+">/);
     assert.match(page.body, /כדי להירשם לאגודה, עקוב אחרי השלבים בתמונה/);
     assert.equal(count(page.body, "/student/confirm?gift="), 0);
+    // Request 47: the Instagram post, at the top, before the "not a member" message.
+    const post = page.body.indexOf('href="https://www.instagram.com/p/DecMEG_jLYt/?xtok=MXIzbmdubGYzbms3Nw==" target="_blank" rel="noopener noreferrer">צפה בפוסט שלנו באינסטגרם');
+    assert.ok(post > 0 && post < page.body.indexOf("אינך חבר אגודה"));
     const image = await app.inject({ url: "/img/how_to_register.jpg" });
     assert.equal(image.statusCode, 200);
     assert.equal(image.headers["content-type"], "image/jpeg");
@@ -139,6 +142,7 @@ describe("student page", () => {
 
     const member = await app.inject({ url: "/student", cookies: await asStudent(ids[0]) });
     assert.doesNotMatch(member.body, /how_to_register/, "a member sees the gifts instead");
+    assert.doesNotMatch(member.body, /DecMEG_jLYt/);
   });
 
   test("a non-member sees the survey first, and the registration image only after it", async () => {
