@@ -190,6 +190,18 @@ describe("login flow", () => {
     });
   }
 
+  test("someone not in the university list sees how to register (request 46)", async () => {
+    const { app: a } = await app({});
+    const page = (await a.inject("/?error=not_in_list")).body;
+    assert.match(page, /לא מצאנו אותך ברשימת האוניברסיטה/);
+    assert.match(page, /<img class="register" src="\/img\/how_to_register.jpg"/);
+    assert.match(page, /כדי להירשם לאגודה, עקוב אחרי השלבים בתמונה/);
+    for (const error of ["no_domain", "wrong_domain", "expired", "cancelled"]) {
+      assert.doesNotMatch((await a.inject(`/?error=${error}`)).body, /how_to_register/, error);
+    }
+    assert.doesNotMatch((await a.inject("/")).body, /how_to_register/);
+  });
+
   test("a wrong state, or a missing state cookie, is refused", async () => {
     for (const tweak of [{ state: "forged" }, { noCookie: true }]) {
       const { app: a } = await app(boss);

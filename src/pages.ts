@@ -385,6 +385,8 @@ function layout(body: string, wide = false): string {
 /** Request 24: the student login page, the default at /. */
 export function loginPage(options: { devLogin: boolean; error?: StudentRefusal }): string {
   const error = options.error ? `<p class="error">${T.refused[options.error]}</p>` : "";
+  // Request 46: someone not in the list sees how to register, as a non-member does.
+  const register = options.error === "not_in_list" ? registerImage(null) : "";
   const dev = options.devLogin
     ? `<fieldset>
   <legend>${T.devTitle}</legend>
@@ -396,6 +398,7 @@ export function loginPage(options: { devLogin: boolean; error?: StudentRefusal }
     : "";
   return layout(`<h1>${T.title}</h1>
 ${error}
+${register}
 <a class="button" href="/auth/google">${T.signIn}</a>
 <p><a href="/staff/login">${T.staffLink}</a></p>
 ${dev}`);
@@ -419,6 +422,11 @@ ${error}
 <p><a href="/">${T.studentLink}</a></p>
 ${dev}`);
 }
+
+/** Requests 37 and 46: how to register with Aguda. The image opens at full size, so a phone can zoom in. */
+const registerImage = (gender: string | null) =>
+  `<p>${isFemale(gender) ? T.student.registerFemale : T.student.register}</p>
+<a href="/img/how_to_register.jpg" target="_blank"><img class="register" src="/img/how_to_register.jpg" alt="${T.student.registerAlt}"></a>`;
 
 /** An imperative, not a verbal noun: התנתק, not התנתקות. Gendered for a known woman. */
 const logoutForm = (gender: string | null = null) =>
@@ -491,8 +499,7 @@ ${s.member === true ? `<a class="button secondary" href="/student/received">${f 
       return layout(`${head}<p class="warn">${f ? T.student.unknownMemberFemale : T.student.unknownMember}</p>`);
     }
     return layout(`${head}<p class="warn">${f ? T.student.notMemberFemale : T.student.notMember}</p>
-<p>${f ? T.student.registerFemale : T.student.register}</p>
-<a href="/img/how_to_register.jpg" target="_blank"><img class="register" src="/img/how_to_register.jpg" alt="${T.student.registerAlt}"></a>`);
+${registerImage(s.gender)}`);
   }
 
   // Request 41: a member with no campus has no stock to choose from.
