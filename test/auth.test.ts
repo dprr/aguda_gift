@@ -196,8 +196,10 @@ describe("login flow", () => {
     assert.match(page, /לא מצאנו אותך ברשימת האוניברסיטה/);
     assert.match(page, /<img class="register" src="\/img\/how_to_register.jpg"/);
     assert.match(page, /כדי להירשם לאגודה, עקוב אחרי השלבים בתמונה/);
+    const post = page.indexOf('href="https://www.instagram.com/p/DecMEG_jLYt/');
+    assert.ok(post > 0 && post < page.indexOf("לא מצאנו אותך"), "the post link comes first (request 47)");
     for (const error of ["no_domain", "wrong_domain", "expired", "cancelled"]) {
-      assert.doesNotMatch((await a.inject(`/?error=${error}`)).body, /how_to_register/, error);
+      assert.doesNotMatch((await a.inject(`/?error=${error}`)).body, /how_to_register|DecMEG_jLYt/, error);
     }
     assert.doesNotMatch((await a.inject("/")).body, /how_to_register/);
   });

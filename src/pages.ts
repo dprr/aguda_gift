@@ -388,8 +388,10 @@ function layout(body: string, wide = false): string {
 /** Request 24: the student login page, the default at /. */
 export function loginPage(options: { devLogin: boolean; error?: StudentRefusal }): string {
   const error = options.error ? `<p class="error">${T.refused[options.error]}</p>` : "";
-  // Request 46: someone not in the list sees how to register, as a non-member does.
-  const register = options.error === "not_in_list" ? registerImage(null) : "";
+  // Requests 46 and 47: someone not in the list sees what a non-member sees: the post at
+  // the top, and how to register.
+  const notInList = options.error === "not_in_list";
+  const register = notInList ? registerImage(null) : "";
   const dev = options.devLogin
     ? `<fieldset>
   <legend>${T.devTitle}</legend>
@@ -400,6 +402,7 @@ export function loginPage(options: { devLogin: boolean; error?: StudentRefusal }
 </fieldset>`
     : "";
   return layout(`<h1>${T.title}</h1>
+${notInList ? postLink(null) : ""}
 ${error}
 ${register}
 <a class="button" href="/auth/google">${T.signIn}</a>
@@ -428,6 +431,8 @@ ${dev}`);
 
 /** Request 47: the owner's Instagram post, linked at the top of the non-member page. */
 const NOT_MEMBER_POST = "https://www.instagram.com/p/DecMEG_jLYt/?xtok=MXIzbmdubGYzbms3Nw==";
+const postLink = (gender: string | null) =>
+  `<p><a href="${NOT_MEMBER_POST}" target="_blank" rel="noopener noreferrer">${isFemale(gender) ? T.student.notMemberPostFemale : T.student.notMemberPost}</a></p>`;
 
 /** Requests 37 and 46: how to register with Aguda. The image opens at full size, so a phone can zoom in. */
 const registerImage = (gender: string | null) =>
@@ -504,7 +509,7 @@ ${s.member === true ? `<a class="button secondary" href="/student/received">${f 
     if (s.member === null) {
       return layout(`${head}<p class="warn">${f ? T.student.unknownMemberFemale : T.student.unknownMember}</p>`);
     }
-    return layout(`${head}<p><a href="${NOT_MEMBER_POST}" target="_blank" rel="noopener noreferrer">${f ? T.student.notMemberPostFemale : T.student.notMemberPost}</a></p>
+    return layout(`${head}${postLink(s.gender)}
 <p class="warn">${f ? T.student.notMemberFemale : T.student.notMember}</p>
 ${registerImage(s.gender)}`);
   }
