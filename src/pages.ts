@@ -7,7 +7,7 @@
 import type { GiftView, SelectionView, StaffStats, StudentView } from "./queries.ts";
 import { AGUDA_LOGO, CAMPUSES, logoOf } from "./campus.ts";
 import { mayManage, type Role } from "./staff.ts";
-import { AGUDA_SOCIAL, CAMPUS_SOCIAL, EXTRA_FIELD, followKey, type Option, type Question, type Social, type Survey } from "./survey.ts";
+import { EXTRA_FIELD, followKey, type Option, type Question, type Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -122,10 +122,6 @@ export const T = {
     extra: "הצג שאלות נוספות",
     extraFemale: "הציגי שאלות נוספות",
     optional: "לא חובה",
-    instagramAll: "האינסטגרם של האגודה",
-    whatsappAll: "הוואטסאפ של האגודה",
-    instagram: "האינסטגרם של האגודה בקמפוס",
-    whatsapp: "הוואטסאפ של האגודה בקמפוס",
   },
 
   staff: {
@@ -607,32 +603,6 @@ export function surveyPage(
     return ` <select class="follow" name="${esc(key)}"><option value="">${female ? T.survey.pickFemale : T.survey.pick}</option>${groups}</select>`;
   };
 
-  /**
-   * Two lines (request 43): Aguda's general links, then the links of the student's true
-   * campus. A campus without WhatsApp shows its Instagram link only (owner's decision).
-   */
-  const links = (q: Question): string => {
-    if (!q.campusSocial) return "";
-    const a = (href: string, text: string) =>
-      `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
-    const line = (parts: (string | false | undefined)[]) => {
-      const kept = parts.filter(Boolean);
-      return kept.length ? `<p class="hint">${kept.join(" · ")}</p>` : "";
-    };
-    const all: Social = AGUDA_SOCIAL;
-    let out = line([all.instagram && a(all.instagram, T.survey.instagramAll), all.whatsapp && a(all.whatsapp, T.survey.whatsappAll)]);
-    for (const name of s.true_campus ? [s.true_campus] : []) {
-      const c = CAMPUS_SOCIAL[name];
-      if (!c) continue;
-      const campus = esc(name);
-      out += line([
-        c.instagram && a(c.instagram, `${T.survey.instagram} ${campus}`),
-        c.whatsapp && a(c.whatsapp, `${T.survey.whatsapp} ${campus}`),
-      ]);
-    }
-    return out;
-  };
-
   const field = (q: Question) => {
     const label = (female && q.labelFemale) || q.label;
     const mark = q.required ? ` <span class="hint">(${T.survey.required})</span>` : "";
@@ -660,7 +630,7 @@ export function surveyPage(
         })
         .join("");
     }
-    return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${links(q)}${error}${input}</fieldset>`;
+    return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${error}${input}</fieldset>`;
   };
 
   // The extra questions come last, inside a section a checkbox opens; CSS shows and hides

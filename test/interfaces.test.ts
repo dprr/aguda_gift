@@ -548,7 +548,7 @@ describe("manager page", () => {
     // An extra answer sent anyway is not stored.
     await app.inject({
       method: "POST", url: "/student/survey", cookies: student,
-      ...form({ dorms: "no", reserve: "no", special: "no", social: "no", extra_open: "1", father: "no" }),
+      ...form({ dorms: "no", reserve: "no", special: "no", extra_open: "1", father: "no" }),
     });
     const stored = (await pool.query("SELECT survey FROM students WHERE national_id = $1", [ids[0]])).rows[0].survey;
     assert.ok(stored && !("father" in stored.answers));

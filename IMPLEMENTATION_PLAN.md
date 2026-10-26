@@ -824,7 +824,7 @@ document is a wish list, and a section in it is not a request.
 | 40 | A מנכ"ל sees which student selected or received which gift, and can mark a received gift as not received; the gift counts follow |
 | 41 | One stock per campus. A worker or a manager belongs to one campus and serves only its students; a מנכ"ל sees all. A student's `true_campus` is the first campus in their list, and they select from its stock |
 | 42 | The true campus is the first campus in the university's record order, not in alphabetical order |
-| 43 | The survey shows exactly 2 lines of media links: Aguda's general links and the true campus's links. Every rule uses `true_campus`, never the full campus list |
+| 43 | ~~The survey shows exactly 2 lines of media links~~: replaced by request 52. Every rule uses `true_campus`, never the full campus list |
 | 44 | The dorm list in the survey is the owner's list of 2026-10-23, and only that list |
 | 45 | A staff member with no campus (–) belongs to all campuses: they see and serve every campus, and a manager with no campus adds workers to any campus, or to all |
 | 46 | A login refused with "לא מצאנו אותך ברשימת האוניברסיטה" also shows how to register (`img/how_to_register.jpg`) |
@@ -833,6 +833,7 @@ document is a wish list, and a section in it is not a request.
 | 49 | The site uses the Aguda theme of the owner's Figma design: cream pages, green `#007554`, the Heebo font, green frames with title tabs, and the Aguda and campus logos. It replaces the dark theme |
 | 50 | On `/manager/gifts`, a מנכ"ל deletes a selection that was not handed over, after a confirm step; the unit returns to the campus stock |
 | 51 | The survey's special populations are the owner's list of 2026-10-26 (12 categories, with feminine labels); "אחר" opens an optional text box. Survey version 2 |
+| 52 | The survey's social-media question is removed, and with it the media links. Survey version 3 |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

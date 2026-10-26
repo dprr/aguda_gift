@@ -173,7 +173,7 @@ describe("the live survey", () => {
 
   test('"אחר" requires its text, and the text is stored beside the choice', async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
-    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes", elections: "pirates" };
+    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", elections: "pirates" };
     const missing = validate(LIVE, { extra_open: "1", ...base, fences: "other", fences_text: "  " });
     assert.deepEqual(!missing.ok && missing.errors, { fences: "required" });
 
@@ -187,7 +187,7 @@ describe("the live survey", () => {
 
   test("fences takes several answers, is optional, and \"אחר\" still needs its text", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
-    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes", elections: "pirates" };
+    const base = { father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", elections: "pirates" };
     const two = validate(LIVE, { extra_open: "1", ...base, fences: ["disaster", "technion"] });
     assert.ok(two.ok && JSON.stringify(two.answers.fences) === '["disaster","technion"]');
     const none = validate(LIVE, { ...base });
@@ -200,7 +200,7 @@ describe("the live survey", () => {
 
   test("the elections question is an optional dropdown with the two owner's options", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
-    const base = { fences: "disaster", father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no", social: "yes" };
+    const base = { fences: "disaster", father: "no", welfare: "yes", dorms: "no", reserve: "no", special: "no" };
     const empty = validate(LIVE, { extra_open: "1", ...base, elections: "" });
     assert.ok(empty.ok && !("elections" in empty.answers));
     const fake = validate(LIVE, { extra_open: "1", ...base, elections: "likud" });
@@ -249,7 +249,7 @@ describe("extra questions", () => {
       assert.equal(Boolean(q.extra), EXTRA.includes(q.id), q.id);
       if (q.extra) assert.equal(q.required, false, q.id);
     }
-    const onlyRequired = validate(LIVE, { dorms: "no", reserve: "no", special: "no", social: "no" });
+    const onlyRequired = validate(LIVE, { dorms: "no", reserve: "no", special: "no" });
     assert.ok(onlyRequired.ok, "the survey submits with every extra question empty");
   });
 
@@ -278,7 +278,7 @@ describe("extra questions", () => {
 
   test("with the box unchecked, extra answers the browser still sends are not stored", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
-    const required = { dorms: "no", reserve: "no", special: "no", social: "no" };
+    const required = { dorms: "no", reserve: "no", special: "no" };
     const sent = { ...required, fences: ["other"], fences_text: "", father: "no", welfare: "yes", elections: "pirates" };
     const closed = validate(LIVE, sent);
     assert.ok(closed.ok, "an invalid hidden answer is no error either");
@@ -288,19 +288,19 @@ describe("extra questions", () => {
 
     await page(ids[0], new URLSearchParams({ ...required, father: "no", elections: "pirates" }).toString());
     const stored = (await pool.query("SELECT survey FROM students WHERE national_id = $1", [ids[0]])).rows[0].survey;
-    assert.equal(stored.version, 2);
+    assert.equal(stored.version, 3);
     assert.ok(!("father" in stored.answers) && !("elections" in stored.answers));
   });
 
   test("an error in an extra question opens the section, so the student sees it", async () => {
-    const html = await page(ids[0], "dorms=no&reserve=no&special=no&social=no&extra_open=1&fences=other&fences_text=");
+    const html = await page(ids[0], "dorms=no&reserve=no&special=no&extra_open=1&fences=other&fences_text=");
     assert.match(html, /class="option extra-toggle"><input type="checkbox" name="extra_open" value="1" checked/);
     assert.match(html, /class="error"/);
   });
 });
 
-describe("dorms, special population, social, and more", () => {
-  const base = { fences: "disaster", father: "no", welfare: "no", reserve: "yes", special: "no", social: "no", elections: "pirates" };
+describe("dorms, special population, and more", () => {
+  const base = { fences: "disaster", father: "no", welfare: "no", reserve: "yes", special: "no", elections: "pirates" };
 
   test("a dorm is required after כן, must be a real dorm, and is dropped after לא", async () => {
     const { SURVEY: LIVE } = await import("../src/survey.ts");
@@ -391,43 +391,4 @@ describe("dorms, special population, social, and more", () => {
     });
   });
 
-  test("the dropdown, the general links, and each campus's own links render", async () => {
-    const live = await buildApp({
-      google: noGoogle, sessionSecret: "s".repeat(32), domains: { student: ["mail.huji.ac.il"], staff: ["aguda.org.il"] },
-      devLogin: true, production: false, origin: ORIGIN,
-    });
-    const set = (id: string, campuses: string[], gender: string | null) =>
-      pool.query("UPDATE students SET campuses = $2, gender = $3 WHERE national_id = $1", [id, campuses, gender]);
-    await set(ids[0], ["הר הצופים"], "נקבה");
-    await set(ids[1], ["רחובות"], "זכר");
-    await set(ids[3], ["גבעת רם", "רחובות"], "זכר");
-    await set(ids[2], [], "זכר");
-    const page = async (id: string) => {
-      const r = await live.inject({ method: "POST", url: "/auth/dev", ...form(`kind=student&national_id=${id}`) });
-      return (await live.inject({ url: "/student", cookies: { session: r.cookies.find((c) => c.name === "session")!.value } })).body;
-    };
-    const scopus = await page(ids[0]);
-    const rehovot = await page(ids[1]);
-    const unknown = await page(ids[2]);
-
-    assert.match(scopus, /<select class="follow" name="dorms_choice">/);
-    for (const html of [scopus, rehovot, unknown]) {
-      assert.match(html, /instagram.com\/huji_aguda/, "general Instagram for everyone");
-      assert.match(html, /chat.whatsapp.com\/LDsyY8tCWl606fSQbVK0tJ/, "general WhatsApp for everyone");
-    }
-    assert.match(scopus, /instagram.com\/aguda.har/);
-    assert.doesNotMatch(scopus, /אין קבוצת וואטסאפ/, "no note for a campus without WhatsApp");
-    assert.match(rehovot, /instagram.com\/hafakulta/);
-    assert.match(rehovot, /phone=972559500921/);
-    // Several campuses: only the true campus, the first one (request 43). Exactly 2 lines.
-    const twoCampuses = await page(ids[3]);
-    assert.doesNotMatch(twoCampuses, /instagram.com\/hafakulta/, "not the second campus");
-    assert.match(twoCampuses, />האינסטגרם של האגודה בקמפוס גבעת רם</);
-    for (const html of [scopus, rehovot, twoCampuses]) {
-      const fieldset = html.slice(html.indexOf('name="social"') - 2000, html.indexOf('name="social"'));
-      assert.equal(fieldset.split('<p class="hint">').length - 1, 2, "exactly two link lines");
-    }
-    assert.doesNotMatch(unknown, /בקמפוס/, "no campus line when the campus is unknown");
-    assert.match(scopus, /target="_blank" rel="noopener noreferrer"/);
-  });
 });
