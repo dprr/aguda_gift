@@ -13,7 +13,7 @@ export const GIFTS: Gift[] = [
   { id: 1, name: "תיק גב", description: "תיק גב שחור עם לוגו האגודה", image: "backpack.jpeg" },
   { id: 2, name: "כוס תרמית", description: "כוס תרמית לבנה עם מכסה", image: "hot_cup.jpeg" },
   { id: 3, name: "מעמד למחשב נייד", description: "מעמד מתקפל עם גובה מתכוונן", image: "laptop_holder.jpeg" },
-  { id: 4, name: "תיק אוכל", description: "תיק אוכל עם שני תאים", image: "lunch_bag.jpeg" },
+  { id: 4, name: "צידנית", description: "צידנית עם שני תאים", image: "lunch_bag.jpeg" },
   { id: 5, name: "קופסת אוכל", description: "קופסת אוכל עם שני תאים וסכו\"ם", image: "lunch_box.jpeg" },
 ];
 
@@ -21,7 +21,7 @@ export type Gift = { id: number; name: string; description: string; image?: stri
 
 /**
  * Request 41: the starting stock of each gift on each campus, supplied by the owner on
- * 2026-10-23 (תיקים, כוסות, מעמד לנייד, צידניות = תיק אוכל, קופסאות אוכל). A row is inserted
+ * 2026-10-23 (תיקים, כוסות, מעמד לנייד, צידניות, קופסאות אוכל). A row is inserted
  * only if it is absent, so a restart never resets a counter, and never overwrites a number
  * a manager changed on the website.
  */
