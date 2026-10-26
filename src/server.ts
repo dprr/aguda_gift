@@ -577,10 +577,32 @@ export async function buildApp(options: AppOptions) {
     { preHandler: requireStaff("ceo") },
     async (request, reply) => {
       const { done, error } = request.query;
-      const message: Notice | undefined = done === "unmarked"
-        ? { kind: "ok", text: T.manager.unmarkDone }
-        : error === "not_taken" ? { kind: "warn", text: T.manager.unmarkNotTaken } : undefined;
+      const message: Notice | undefined =
+        done === "unmarked" ? { kind: "ok", text: T.manager.unmarkDone }
+        : done === "removed" ? { kind: "ok", text: T.manager.removeDone }
+        : error === "not_taken" ? { kind: "warn", text: T.manager.unmarkNotTaken }
+        : error === "taken" ? { kind: "error", text: T.manager.removeTaken }
+        : undefined;
       return html(reply, selectionsPage({ email: staffEmail(request), rows: await listSelections(), message }));
+    },
+  );
+
+  // Request 50: a ceo deletes a selection that was not handed over, after a confirm step.
+  // The same resetStudent() as the desk, so the unit returns to the campus stock.
+  app.post<{ Body: { national_id?: string; confirm?: string } }>(
+    "/manager/gifts/remove",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const id = deskId(request.body?.national_id);
+      const student = id ? await findStudent(id) : null;
+      if (!student || student.gift_id === null) return reply.redirect("/manager/gifts");
+      if (student.gift_taken_at) return reply.redirect("/manager/gifts?error=taken");
+      if (request.body?.confirm !== "1") {
+        return html(reply, resetConfirmPage(student, "gift", "/manager/gifts/remove", "/manager/gifts"));
+      }
+      const result = await resetStudent(id, "gift");
+      if (result.ok) request.log.info({ by: staffEmail(request) }, "selection deleted");
+      return reply.redirect(result.ok ? "/manager/gifts?done=removed" : result.reason === "taken" ? "/manager/gifts?error=taken" : "/manager/gifts");
     },
   );
 

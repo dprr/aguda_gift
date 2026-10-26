@@ -630,6 +630,36 @@ describe("manager page", () => {
     assert.equal((await gift(2)).given_count, 1);
   });
 
+  test("a ceo deletes a selection not handed over, after a confirm step (request 50)", async () => {
+    await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
+    const ceo = await login({ kind: "staff", email: "chief@aguda.org.il" });
+    await selectGift(ids[0], 2);
+    await selectGift(ids[1], 3);
+    await markTaken(ids[1]);
+    const list = (await app.inject({ url: "/manager/gifts", cookies: ceo })).body;
+    assert.equal(list.split('action="/manager/gifts/remove"').length - 1, 1, "only the row not handed over");
+
+    const confirm = await app.inject({ method: "POST", url: "/manager/gifts/remove", cookies: ceo, ...form({ national_id: ids[0] }) });
+    assert.match(confirm.body, /אישור מחיקה/);
+    assert.match(confirm.body, /action="\/manager\/gifts\/remove"/);
+    assert.match(confirm.body, /href="\/manager\/gifts"/);
+    assert.equal((await student(ids[0])).gift_id, 2, "the confirm page changes nothing");
+
+    const done = await app.inject({ method: "POST", url: "/manager/gifts/remove", cookies: ceo, ...form({ national_id: ids[0], confirm: "1" }) });
+    assert.equal(done.headers.location, "/manager/gifts?done=removed");
+    assert.equal((await student(ids[0])).gift_id, null);
+    assert.ok((await student(ids[0])).survey, "the survey stays");
+    assert.equal((await gift(2)).requested_count, 0);
+
+    const handedOver = await app.inject({ method: "POST", url: "/manager/gifts/remove", cookies: ceo, ...form({ national_id: ids[1], confirm: "1" }) });
+    assert.equal(handedOver.headers.location, "/manager/gifts?error=taken");
+    assert.equal((await student(ids[1])).gift_id, 3);
+    assert.deepEqual(await counterDrift(), []);
+    for (const cookies of [await asManager(), await asStaff()]) {
+      assert.equal((await app.inject({ method: "POST", url: "/manager/gifts/remove", cookies, ...form({ national_id: ids[1], confirm: "1" }) })).statusCode, 403);
+    }
+  });
+
   test("only a ceo sees the selections or reverses a handout", async () => {
     await selectGift(ids[0], 2);
     await markTaken(ids[0]);

@@ -222,6 +222,10 @@ export const T = {
     unmarkConfirm: "בטל את המסירה",
     unmarkDone: "ביטלנו את המסירה. המתנה במצב \"נבחרה\".",
     unmarkNotTaken: "המתנה כבר אינה מסומנת כנמסרה.",
+    /** Request 50: the ceo deletes a selection that was not handed over yet. */
+    removeSelection: "מחק את הבחירה",
+    removeDone: "מחקנו את הבחירה. הסטודנט יכול לבחור מתנה מחדש.",
+    removeTaken: "המתנה כבר נמסרה, ולכן לא מחקנו את הבחירה. בטל קודם את המסירה.",
     /** Request 33: the ceo's switch for the survey's extra questions. */
     extraTitle: "שאלות נוספות בסקר",
     extraIsOn: "הסטודנטים יכולים לפתוח את השאלות הנוספות (לא חובה).",
@@ -768,7 +772,7 @@ ${history}
 }
 
 /** Request 30: deleting cannot be undone, so it takes a second, explicit step. */
-export function resetConfirmPage(s: StudentView, what: "gift" | "all"): string {
+export function resetConfirmPage(s: StudentView, what: "gift" | "all", action = "/staff/reset", back = "/staff"): string {
   const f = isFemale(s.gender);
   const warn = what === "gift"
     ? f ? T.staff.resetGiftWarnFemale : T.staff.resetGiftWarn
@@ -777,13 +781,13 @@ export function resetConfirmPage(s: StudentView, what: "gift" | "all"): string {
 <p class="big">${esc(s.first_name)} ${esc(s.last_name)}</p>
 <p>${ltr(s.national_id)}${s.gift_name ? ` · ${esc(s.gift_name)}` : ""}</p>
 <p class="warn">${warn}</p>
-<form method="post" action="/staff/reset">
+<form method="post" action="${action}">
   <input type="hidden" name="national_id" value="${esc(s.national_id)}">
   <input type="hidden" name="what" value="${what}">
   <input type="hidden" name="confirm" value="1">
   <button class="button">${T.staff.resetConfirm}</button>
 </form>
-<a class="button secondary" href="/staff">${T.staff.back}</a>`);
+<a class="button secondary" href="${back}">${T.staff.back}</a>`);
 }
 
 export function staffPage(options: {
@@ -844,12 +848,17 @@ export function selectionsPage(options: { email: string; rows: SelectionView[]; 
     .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${esc(r.true_campus ?? "—")}</td><td>${
       r.gift_taken_at ? `${M.receivedAt} ${when(r.gift_taken_at)}` : M.selected
     }</td><td>${
+      // A handed-over gift can be reversed; a selection not handed over can be deleted
+      // (request 50). Never both: a selection is never deleted after a handout.
       r.gift_taken_at
         ? `<form method="post" action="/manager/gifts/unmark">
   <input type="hidden" name="national_id" value="${esc(r.national_id)}">
   <button class="button secondary small">${M.unmark}</button>
 </form>`
-        : ""
+        : `<form method="post" action="/manager/gifts/remove">
+  <input type="hidden" name="national_id" value="${esc(r.national_id)}">
+  <button class="button secondary small">${M.removeSelection}</button>
+</form>`
     }</td></tr>`)
     .join("");
   return layout(

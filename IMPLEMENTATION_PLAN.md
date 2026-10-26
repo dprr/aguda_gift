@@ -831,6 +831,7 @@ document is a wish list, and a section in it is not a request.
 | 47 | The non-member page links, at the top, to the owner's Instagram post |
 | 48 | After the selection, the student's gift card says "המתנה שמורה עבורך רק להיום". A note only: the selection itself still never expires (request 7) |
 | 49 | The site uses the Aguda theme of the owner's Figma design: cream pages, green `#007554`, the Heebo font, green frames with title tabs, and the Aguda and campus logos. It replaces the dark theme |
+| 50 | On `/manager/gifts`, a מנכ"ל deletes a selection that was not handed over, after a confirm step; the unit returns to the campus stock |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
