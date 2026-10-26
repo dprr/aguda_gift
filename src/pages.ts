@@ -126,9 +126,6 @@ export const T = {
     whatsappAll: "הוואטסאפ של האגודה",
     instagram: "האינסטגרם של האגודה בקמפוס",
     whatsapp: "הוואטסאפ של האגודה בקמפוס",
-    noWhatsapp: "אין קבוצת וואטסאפ בקמפוס",
-    startOne: "הקם אחת בעצמך.",
-    startOneFemale: "הקימי אחת בעצמך.",
   },
 
   staff: {
@@ -606,7 +603,7 @@ export function surveyPage(
 
   /**
    * Two lines (request 43): Aguda's general links, then the links of the student's true
-   * campus. A campus listed without WhatsApp invites the student to start a group.
+   * campus. A campus without WhatsApp shows its Instagram link only (owner's decision).
    */
   const links = (q: Question): string => {
     if (!q.campusSocial) return "";
@@ -624,9 +621,7 @@ export function surveyPage(
       const campus = esc(name);
       out += line([
         c.instagram && a(c.instagram, `${T.survey.instagram} ${campus}`),
-        c.whatsapp
-          ? a(c.whatsapp, `${T.survey.whatsapp} ${campus}`)
-          : `${T.survey.noWhatsapp} ${campus}. ${female ? T.survey.startOneFemale : T.survey.startOne}`,
+        c.whatsapp && a(c.whatsapp, `${T.survey.whatsapp} ${campus}`),
       ]);
     }
     return out;

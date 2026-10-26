@@ -205,8 +205,8 @@ export const AGUDA_SOCIAL: Social = {
 
 /**
  * Each campus's own links, keyed by the campus name in faculty-campus.csv (request 38).
- * A campus with an entry but no WhatsApp shows a note inviting the student to start a
- * group. A campus with no entry shows nothing.
+ * A campus without WhatsApp shows its Instagram link only. A campus with no entry shows
+ * nothing.
  */
 export const CAMPUS_SOCIAL: Record<string, Social> = {
   "גבעת רם": {

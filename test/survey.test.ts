@@ -391,7 +391,7 @@ describe("dorms, special population, social, and more", () => {
       assert.match(html, /chat.whatsapp.com\/LDsyY8tCWl606fSQbVK0tJ/, "general WhatsApp for everyone");
     }
     assert.match(scopus, /instagram.com\/aguda.har/);
-    assert.match(scopus, /אין קבוצת וואטסאפ בקמפוס הר הצופים. הקימי אחת בעצמך./, "female form");
+    assert.doesNotMatch(scopus, /אין קבוצת וואטסאפ/, "no note for a campus without WhatsApp");
     assert.match(rehovot, /instagram.com\/hafakulta/);
     assert.match(rehovot, /phone=972559500921/);
     // Several campuses: only the true campus, the first one (request 43). Exactly 2 lines.
