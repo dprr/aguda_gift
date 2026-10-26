@@ -288,7 +288,7 @@ describe("extra questions", () => {
 
     await page(ids[0], new URLSearchParams({ ...required, father: "no", elections: "pirates" }).toString());
     const stored = (await pool.query("SELECT survey FROM students WHERE national_id = $1", [ids[0]])).rows[0].survey;
-    assert.equal(stored.version, 1);
+    assert.equal(stored.version, 2);
     assert.ok(!("father" in stored.answers) && !("elections" in stored.answers));
   });
 
@@ -322,10 +322,33 @@ describe("dorms, special population, social, and more", () => {
     assert.deepEqual(!fake.ok && fake.errors, { special: "invalid" });
     const one = validate(LIVE, { ...base, dorms: "no", special: "yes", special_choices: "druze" });
     assert.ok(one.ok && JSON.stringify(one.answers.special_choices) === '["druze"]');
-    const many = validate(LIVE, { ...base, dorms: "no", special: "yes", special_choices: ["arab_israeli", "former_haredi", "other"] });
+    const many = validate(LIVE, { ...base, dorms: "no", special: "yes", special_choices: ["religious", "lgbtq", "other"] });
     assert.ok(many.ok && (many.answers.special_choices as string[]).length === 3);
     const no = validate(LIVE, { ...base, dorms: "no", special: "no", special_choices: ["druze"] });
     assert.ok(no.ok && !("special_choices" in no.answers), "categories are dropped after לא");
+  });
+
+  test("the special populations are the owner's list of 2026-10-26, in order", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const q = LIVE.questions.find((x) => x.id === "special")!;
+    assert.ok(q.kind === "choice");
+    const follow = q.options.find((o) => o.value === "yes")!.follow!;
+    assert.ok(follow.kind === "multi");
+    assert.deepEqual(follow.options.map((o) => o.label.split(" (")[0]), [
+      "חרדי", "דתי", "מסורתי", "חילוני", "מוסלמי", "נוצרי", "דרוזי", "צ'רקסי",
+      "משתייך לקהילת יוצאי אתיופיה", 'משתייך לקהילת הלהט"ב', "אדם עם מוגבלות", "אחר",
+    ]);
+  });
+
+  test("אחר opens an optional text, kept only while אחר is checked", async () => {
+    const { SURVEY: LIVE } = await import("../src/survey.ts");
+    const yes = { ...base, dorms: "no", special: "yes" };
+    const withText = validate(LIVE, { ...yes, special_choices: ["disability", "other"], special_choices_text: " לקות שמיעה " });
+    assert.ok(withText.ok && withText.answers.special_choices_text === "לקות שמיעה");
+    const empty = validate(LIVE, { ...yes, special_choices: ["other"], special_choices_text: "" });
+    assert.ok(empty.ok && !("special_choices_text" in empty.answers), "the text is optional");
+    const notOther = validate(LIVE, { ...yes, special_choices: ["druze"], special_choices_text: "leftover" });
+    assert.ok(notOther.ok && !("special_choices_text" in notOther.answers), "dropped when אחר is not checked");
   });
 
   test("special population renders as a dropdown, and כן reveals gendered checkboxes", async () => {
@@ -340,8 +363,10 @@ describe("dorms, special population, social, and more", () => {
     assert.match(html, /<div class="when" data-when="yes"><div class="choices">/);
     assert.match(html, /option\[value="yes"\]:checked\) \.when\[data-when="yes"\] \{ display: block; \}/);
     assert.equal(html.split('type="checkbox" name="special_choices"').length - 1, 12);
-    assert.match(html, /value="arab_israeli"> ערבייה בעלת אזרחות ישראלית/);
-    assert.match(html, /value="left_religion"> יוצאת בשאלה שאינה חרדית/);
+    assert.match(html, /value="religious"> דתייה/);
+    assert.match(html, /value="lgbtq"> משתייכת לקהילת הלהט&quot;ב/);
+    assert.match(html, /value="disability"> אדם עם מוגבלות \(כדי לפרט את סוג המוגבלות, בחרי גם &quot;אחר&quot; וכתבי שם\)/);
+    assert.match(html, /value="other"> אחר <input type="text" class="follow" name="special_choices_text"/);
   });
 
   test("the last question is optional", async () => {

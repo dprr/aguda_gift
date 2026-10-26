@@ -37,7 +37,7 @@ export type Option = {
   follow?:
     | { kind: "text" }
     | { kind: "select"; groups: { label: string; options: Option[] }[] }
-    | { kind: "multi"; options: Option[] };
+    | { kind: "multi"; options: Option[]; otherText?: string };
 };
 export type Question =
   | (Base & { kind: "text"; campusSocial?: boolean })
@@ -71,22 +71,26 @@ const DORMS = [
 ];
 
 /**
- * The special populations of the university list (specialPopulationsList), as of the 2027
- * list. The university writes them with gendered slash forms, which this project never
- * uses, so each has a masculine label and a feminine one.
+ * The special populations a student can mark, as the owner listed them on 2026-10-26 (any
+ * number). Each has a masculine label and, where it differs, a feminine one. "אחר" opens an
+ * optional text box (otherText), where a student can also detail a disability.
  */
 const SPECIAL_POPULATIONS: Option[] = [
-  { value: "arab_israeli", label: "ערבי בעל אזרחות ישראלית", labelFemale: "ערבייה בעלת אזרחות ישראלית" },
-  { value: "arab_east_jerusalem", label: "ערבי תושב מזרח ירושלים", labelFemale: "ערבייה תושבת מזרח ירושלים" },
-  { value: "arab_palestinian_authority", label: "ערבי תושב הרשות הפלסטינית", labelFemale: "ערבייה תושבת הרשות הפלסטינית" },
-  { value: "haredi_school", label: "חרדי (לפי סקטור בית ספר)", labelFemale: "חרדית (לפי סקטור בית ספר)" },
-  { value: "haredi_declared", label: "חרדי (לפי הצהרה)", labelFemale: "חרדית (לפי הצהרה)" },
-  { value: "former_haredi", label: "חרדי לשעבר", labelFemale: "חרדית לשעבר" },
-  { value: "left_religion", label: "יוצא בשאלה שאינו חרדי", labelFemale: "יוצאת בשאלה שאינה חרדית" },
-  { value: "ethiopian", label: "ישראלי יוצא אתיופיה", labelFemale: "ישראלית יוצאת אתיופיה" },
+  { value: "haredi", label: "חרדי", labelFemale: "חרדית" },
+  { value: "religious", label: "דתי", labelFemale: "דתייה" },
+  { value: "traditional", label: "מסורתי", labelFemale: "מסורתית" },
+  { value: "secular", label: "חילוני", labelFemale: "חילונית" },
+  { value: "muslim", label: "מוסלמי", labelFemale: "מוסלמית" },
+  { value: "christian", label: "נוצרי", labelFemale: "נוצרייה" },
   { value: "druze", label: "דרוזי", labelFemale: "דרוזית" },
-  { value: "bedouin", label: "בדואי", labelFemale: "בדואית" },
   { value: "circassian", label: "צ'רקסי", labelFemale: "צ'רקסית" },
+  { value: "ethiopian", label: "משתייך לקהילת יוצאי אתיופיה", labelFemale: "משתייכת לקהילת יוצאי אתיופיה" },
+  { value: "lgbtq", label: "משתייך לקהילת הלהט\"ב", labelFemale: "משתייכת לקהילת הלהט\"ב" },
+  {
+    value: "disability",
+    label: "אדם עם מוגבלות (כדי לפרט את סוג המוגבלות, בחר גם \"אחר\" וכתוב שם)",
+    labelFemale: "אדם עם מוגבלות (כדי לפרט את סוג המוגבלות, בחרי גם \"אחר\" וכתבי שם)",
+  },
   { value: "other", label: "אחר" },
 ];
 
@@ -97,10 +101,10 @@ const YES_NO: Option[] = [
 
 /**
  * The live survey. Version 1: the owner reset the version, and deleted every earlier answer,
- * on 2026-10-20.
+ * on 2026-10-20. Version 2: the owner's new special-population list (2026-10-26).
  */
 export const SURVEY: Survey = {
-  version: 1,
+  version: 2,
   questions: [
     {
       id: "fences",
@@ -159,7 +163,7 @@ export const SURVEY: Survey = {
       labelFemale: "האם את מאוכלוסייה מיוחדת?",
       required: true,
       options: [
-        { value: "yes", label: "כן", follow: { kind: "multi", options: SPECIAL_POPULATIONS } },
+        { value: "yes", label: "כן", follow: { kind: "multi", options: SPECIAL_POPULATIONS, otherText: "other" } },
         { value: "no", label: "לא" },
       ],
     },
@@ -277,7 +281,16 @@ export function validate(
             const picked = (Array.isArray(raw) ? raw : raw === undefined || raw === "" ? [] : [raw]).map(String);
             if (picked.some((v) => !allowed.has(v))) errors[q.id] = "invalid";
             else if (picked.length === 0) errors[q.id] = "required";
-            else answers[key] = [...new Set(picked)];
+            else {
+              answers[key] = [...new Set(picked)];
+              // The optional text of the otherText option, kept only when it is checked.
+              if (o.follow.otherText && picked.includes(o.follow.otherText)) {
+                const raw = body[`${key}_text`];
+                const text = typeof raw === "string" ? raw.trim() : "";
+                if (text.length > MAX_TEXT) errors[q.id] = "invalid";
+                else if (text) answers[`${key}_text`] = text;
+              }
+            }
             continue;
           }
           const value = typeof raw === "string" ? raw.trim() : "";

@@ -589,8 +589,14 @@ export function surveyPage(
     }
     if (o.follow.kind === "multi") {
       const picked = new Set((Array.isArray(values[key]) ? values[key] : [values[key]]).map(String));
+      const otherKey = `${key}_text`;
       return `<div class="choices">${o.follow.options
-        .map((x) => `<label class="option"><input type="checkbox" name="${esc(key)}" value="${esc(x.value)}"${picked.has(x.value) ? " checked" : ""}> ${esc((female && x.labelFemale) || x.label)}</label>`)
+        .map((x) => `<label class="option"><input type="checkbox" name="${esc(key)}" value="${esc(x.value)}"${picked.has(x.value) ? " checked" : ""}> ${esc((female && x.labelFemale) || x.label)}${
+          // The optional text box of "אחר", shown only while it is checked (CSS).
+          o.follow!.kind === "multi" && o.follow!.otherText === x.value
+            ? ` <input type="text" class="follow" name="${esc(otherKey)}" maxlength="1000" value="${esc(values[otherKey])}">`
+            : ""
+        }</label>`)
         .join("")}</div>`;
     }
     const groups = o.follow.groups
