@@ -526,47 +526,6 @@ describe("manager page", () => {
     assert.match((await app.inject({ url: "/manager", cookies })).body, /chief@aguda\.org\.il.*boss@aguda\.org\.il/s);
   });
 
-  test("a ceo switches the extra questions off and on; students see them only when on (request 33)", async () => {
-    await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
-    await pool.query("UPDATE students SET survey = NULL WHERE national_id = $1", [ids[0]]);
-    const ceo = await login({ kind: "staff", email: "chief@aguda.org.il" });
-    const student = await asStudent(ids[0]);
-    const survey = async () => (await app.inject({ url: "/student", cookies: student })).body;
-
-    const on = (await app.inject({ url: "/manager", cookies: ceo })).body;
-    assert.match(on, /שאלות נוספות בסקר/);
-    assert.match(on, /name="enabled" value="0">\s*<button class="button secondary">השבת את השאלות הנוספות/);
-    assert.match(await survey(), /class="option extra-toggle"/, "on by default");
-
-    const off = await app.inject({ method: "POST", url: "/manager/extra-questions", cookies: ceo, ...form({ enabled: "0" }) });
-    assert.equal(off.headers.location, "/manager?done=extra_off");
-    assert.match((await app.inject({ url: off.headers.location as string, cookies: ceo })).body, /הסטודנטים אינם רואים את השאלות הנוספות/);
-    const hidden = await survey();
-    assert.doesNotMatch(hidden, /class="option extra-toggle"/);
-    for (const id of ["fences", "father", "welfare", "elections"]) assert.doesNotMatch(hidden, new RegExp(`name="${id}"`), id);
-
-    // An extra answer sent anyway is not stored.
-    await app.inject({
-      method: "POST", url: "/student/survey", cookies: student,
-      ...form({ dorms: "no", reserve: "no", special: "no", extra_open: "1", father: "no" }),
-    });
-    const stored = (await pool.query("SELECT survey FROM students WHERE national_id = $1", [ids[0]])).rows[0].survey;
-    assert.ok(stored && !("father" in stored.answers));
-
-    const back = await app.inject({ method: "POST", url: "/manager/extra-questions", cookies: ceo, ...form({ enabled: "1" }) });
-    assert.equal(back.headers.location, "/manager?done=extra_on");
-    assert.equal((await pool.query("SELECT extra_questions FROM settings")).rows[0].extra_questions, true);
-  });
-
-  test("only a ceo sees or uses the extra-questions switch", async () => {
-    assert.doesNotMatch((await app.inject({ url: "/manager", cookies: await asManager() })).body, /extra-questions/);
-    for (const cookies of [await asManager(), await asStaff()]) {
-      const res = await app.inject({ method: "POST", url: "/manager/extra-questions", cookies, ...form({ enabled: "0" }) });
-      assert.equal(res.statusCode, 403);
-    }
-    assert.equal((await pool.query("SELECT extra_questions FROM settings")).rows[0].extra_questions, true);
-  });
-
   test("a ceo downloads each table as CSV that Excel reads, with no formula injection", async () => {
     await pool.query("INSERT INTO staff (email, role) VALUES ('chief@aguda.org.il', 'ceo')");
     await pool.query(`UPDATE students SET first_name = '=HYPERLINK("x")', last_name = 'כהן, "הגדול"' WHERE national_id = $1`, [ids[0]]);

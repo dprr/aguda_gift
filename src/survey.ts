@@ -18,11 +18,6 @@ type Base = {
   /** Hebrew, feminine form, if the wording changes for a woman. */
   labelFemale?: string;
   required: boolean;
-  /**
-   * An optional question, shown last, inside a section the student opens with a checkbox
-   * (owner's decision). Its answers count only while that checkbox is checked.
-   */
-  extra?: boolean;
 };
 export type Option = {
   value: string;
@@ -102,40 +97,11 @@ const YES_NO: Option[] = [
  * The live survey. Version 1: the owner reset the version, and deleted every earlier answer,
  * on 2026-10-20. Version 2: the owner's new special-population list (2026-10-26).
  * Version 3: the social-media question is removed, and with it the media links.
+ * Version 4: the four optional extra questions are removed, with their checkbox.
  */
 export const SURVEY: Survey = {
-  version: 3,
+  version: 4,
   questions: [
-    {
-      id: "fences",
-      kind: "multi", // at least one, because required
-      label: "מה אתה חושב על הגדרות החדשות בגבעת רם?",
-      labelFemale: "מה את חושבת על הגדרות החדשות בגבעת רם?",
-      required: false,
-      extra: true,
-      options: [
-        { value: "disaster", label: "אסון לאומי" },
-        { value: "technion", label: "שוקל לעבור לטכניון בגלל זה", labelFemale: "שוקלת לעבור לטכניון בגלל זה" },
-        { value: "other", label: "אחר", follow: { kind: "text" } },
-      ],
-    },
-    {
-      id: "father",
-      kind: "choice",
-      label: "אבא שלך ערומקו?",
-      required: false,
-      extra: true,
-      options: [{ value: "no", label: "לא" }],
-    },
-    {
-      id: "welfare",
-      kind: "choice",
-      label: "האם אתה צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
-      labelFemale: "האם את צופה ליהנות מהטבה שתשלום דמי רווחה נותנת?",
-      required: false,
-      extra: true,
-      options: YES_NO,
-    },
     {
       id: "dorms",
       kind: "choice",
@@ -168,19 +134,6 @@ export const SURVEY: Survey = {
       ],
     },
     {
-      id: "elections",
-      kind: "choice",
-      dropdown: true,
-      label: "למי תצביע בבחירות הקרובות?",
-      labelFemale: "למי תצביעי בבחירות הקרובות?",
-      required: false,
-      extra: true,
-      options: [
-        { value: "pirates", label: "הפיראטים" },
-        { value: "throw_away", label: "אזרוק את הקול שלי לאנשים שלא אכפת להם ממני" },
-      ],
-    },
-    {
       id: "more",
       kind: "text",
       label: "משהו נוסף שתרצה לשתף אותנו?",
@@ -196,8 +149,6 @@ export const followKey = (questionId: string, follow: NonNullable<Option["follow
 
 export type Answers = Record<string, string | string[]>;
 
-/** The form field of the checkbox that opens the extra questions. */
-export const EXTRA_FIELD = "extra_open";
 const MAX_TEXT = 1000;
 
 /**
@@ -210,12 +161,8 @@ export function validate(
 ): { ok: true; answers: Answers } | { ok: false; errors: Record<string, "required" | "invalid"> } {
   const answers: Answers = {};
   const errors: Record<string, "required" | "invalid"> = {};
-  // The extra questions count only while their checkbox is checked (EXTRA_FIELD). With it
-  // unchecked, anything the browser still sends for them is ignored.
-  const extraOpen = body[EXTRA_FIELD] === "1";
 
   for (const q of survey.questions) {
-    if (q.extra && !extraOpen) continue;
     const raw = body[q.id];
     if (q.kind === "text") {
       const value = typeof raw === "string" ? raw.trim() : "";

@@ -13,7 +13,7 @@ import { startSyncSchedule } from "./schedule.ts";
 import { type Actor, addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock, staffOf } from "./staff.ts";
 import { isCampus } from "./campus.ts";
 import { exportCsv, isExport } from "./export.ts";
-import { clearStaffAlerts, extraQuestionsEnabled, setExtraQuestions, staffAlerts } from "./settings.ts";
+import { clearStaffAlerts, staffAlerts } from "./settings.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
 import { UniversitySource } from "./university.ts";
@@ -44,15 +44,7 @@ const IMG_DIR = join(import.meta.dirname, "..", "img");
 const FONT_DIR = join(import.meta.dirname, "..", "fonts");
 
 export async function buildApp(options: AppOptions) {
-  const fullSurvey = options.survey ?? SURVEY;
-  /**
-   * The survey students get now. Request 33: with the extra questions switched off, they
-   * are removed here, so the page never shows them and validate() never reads them.
-   */
-  const liveSurvey = async (): Promise<Survey> =>
-    (await extraQuestionsEnabled())
-      ? fullSurvey
-      : { ...fullSurvey, questions: fullSurvey.questions.filter((q) => !q.extra) };
+  const survey = options.survey ?? SURVEY;
   if (options.production && options.devLogin && !options.demo) {
     throw new Error("DEV_LOGIN must be off in production");
   }
@@ -321,7 +313,7 @@ export async function buildApp(options: AppOptions) {
         return reply.redirect("/");
       }
       // Request 22: member or not, the survey comes first.
-      if (!s.survey_submitted) return html(reply, surveyPage(s, await liveSurvey()));
+      if (!s.survey_submitted) return html(reply, surveyPage(s, survey));
 
       const { saved, error, surveyed, received } = request.query;
       let message: Notice | undefined;
@@ -377,7 +369,6 @@ export async function buildApp(options: AppOptions) {
     { preHandler: requireStudent },
     async (request, reply) => {
       const body = request.body ?? {};
-      const survey = await liveSurvey();
       const checked = validate(survey, body);
       if (!checked.ok) {
         const s = await findStudent(studentId(request));
@@ -524,7 +515,6 @@ export async function buildApp(options: AppOptions) {
         email: staffEmail(request),
         role: staffRole(request),
         campus: actor(request).campus,
-        extraQuestions: await extraQuestionsEnabled(),
         alerts: staffRole(request) === "ceo" ? await staffAlerts() : [],
         // Request 41: a manager sees their own campus; a ceo sees every campus.
         staff: await listStaff(scope(request)),
@@ -632,17 +622,6 @@ export async function buildApp(options: AppOptions) {
       if (Number.isNaN(Date.parse(upTo))) return reply.code(400).send("Bad request");
       await clearStaffAlerts(upTo);
       return reply.redirect("/manager");
-    },
-  );
-
-  // Request 33: a ceo switches the survey's extra questions on or off.
-  app.post<{ Body: { enabled?: string } }>(
-    "/manager/extra-questions",
-    { preHandler: requireStaff("ceo") },
-    async (request, reply) => {
-      const enabled = request.body?.enabled === "1";
-      await setExtraQuestions(enabled);
-      return reply.redirect(`/manager?done=${enabled ? "extra_on" : "extra_off"}`);
     },
   );
 

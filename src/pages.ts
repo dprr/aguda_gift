@@ -7,7 +7,7 @@
 import type { GiftView, SelectionView, StaffStats, StudentView } from "./queries.ts";
 import { AGUDA_LOGO, CAMPUSES, logoOf } from "./campus.ts";
 import { mayManage, type Role } from "./staff.ts";
-import { EXTRA_FIELD, followKey, type Option, type Question, type Survey } from "./survey.ts";
+import { followKey, type Option, type Question, type Survey } from "./survey.ts";
 
 export const T = {
   title: "מתנות האגודה",
@@ -119,9 +119,6 @@ export const T = {
     thanks: "תודה. שמרנו את התשובות.",
     pick: "בחר",
     pickFemale: "בחרי",
-    extra: "הצג שאלות נוספות",
-    extraFemale: "הציגי שאלות נוספות",
-    optional: "לא חובה",
   },
 
   staff: {
@@ -219,12 +216,6 @@ export const T = {
     removeSelection: "מחק את הבחירה",
     removeDone: "מחקנו את הבחירה. הסטודנט יכול לבחור מתנה מחדש.",
     removeTaken: "המתנה כבר נמסרה, ולכן לא מחקנו את הבחירה. בטל קודם את המסירה.",
-    /** Request 33: the ceo's switch for the survey's extra questions. */
-    extraTitle: "שאלות נוספות בסקר",
-    extraIsOn: "הסטודנטים יכולים לפתוח את השאלות הנוספות (לא חובה).",
-    extraIsOff: "הסטודנטים אינם רואים את השאלות הנוספות.",
-    extraTurnOn: "הפעל את השאלות הנוספות",
-    extraTurnOff: "השבת את השאלות הנוספות",
     /** Request 29: the ceo's downloads, one CSV file per table. */
     export: "הורדת הנתונים",
     exportHint: "קובץ CSV לכל טבלה. הקבצים כוללים פרטים אישיים של סטודנטים: שמור אותם במקום מוגן, ומחק אותם כשסיימת.",
@@ -238,8 +229,6 @@ export const T = {
       promoted_ceo: "עדכנו את התפקיד למנכ\"ל.",
       removed: "הסרנו את הכתובת מרשימת הצוות.",
       stock: "שמרנו את המלאי.",
-      extra_on: "הפעלנו את השאלות הנוספות.",
-      extra_off: "השבתנו את השאלות הנוספות.",
     },
     errors: {
       invalid: "הכתובת אינה כתובת דוא\"ל תקינה.",
@@ -397,9 +386,6 @@ function layout(body: string, wide = false, brand = false): string {
   /* A follow-up shows only once its own option is picked. CSS only, no JavaScript. */
   .option input:not(:checked) ~ .follow { display: none; }
   .when { display: none; margin-block-start: 0.5rem; }
-  .extra-toggle { font-weight: 700; margin-block-end: 1rem; }
-  .extra { display: none; }
-  form:has(.extra-toggle input:checked) .extra { display: block; }
   textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.5rem; }
 </style>
 </head>
@@ -633,24 +619,7 @@ export function surveyPage(
     return `<fieldset class="question"><legend>${esc(label)}${mark}</legend>${error}${input}</fieldset>`;
   };
 
-  // The extra questions come last, inside a section a checkbox opens; CSS shows and hides
-  // it. Unchecking clears every extra answer: the small script does it on the page, and
-  // validate() ignores extra answers sent while the box is unchecked, so a browser without
-  // JavaScript stores nothing either. The box starts checked when the student already
-  // answered an extra question, or one has an error, so nothing the student must see stays
-  // hidden.
-  const main = survey.questions.filter((q) => !q.extra);
-  const extra = survey.questions.filter((q) => q.extra);
-  const answered = (q: Question) =>
-    values[EXTRA_FIELD] === "1" &&
-    (state.errors?.[q.id] !== undefined || (values[q.id] !== undefined && values[q.id] !== ""));
-  const extraSection = extra.length
-    ? `<label class="option extra-toggle"><input type="checkbox" name="${EXTRA_FIELD}" value="1"${extra.some(answered) ? " checked" : ""} onchange="if (!this.checked) for (const e of this.form.querySelectorAll('.extra input, .extra select, .extra textarea')) { if (e.type === 'checkbox' || e.type === 'radio') e.checked = false; else if (e.tagName === 'SELECT') e.selectedIndex = 0; else e.value = ''; }"> ${female ? T.survey.extraFemale : T.survey.extra} <span class="hint">(${T.survey.optional})</span></label>
-<div class="extra">
-${extra.map(field).join("\n")}
-</div>`
-    : "";
-  const fields = `${main.map(field).join("\n")}\n${extraSection}`;
+  const fields = survey.questions.map(field).join("\n");
 
   return layout(`<div class="bar">${logo(s.true_campus)}<h1>${T.survey.title}</h1>${logoutForm(s.gender)}</div>
 <p>${female ? T.survey.introFemale : T.survey.intro}</p>
@@ -863,15 +832,13 @@ export function managerPage(options: {
   role: Role;
   /** Request 41: the viewer's campus; null for a ceo. */
   campus: string | null;
-  /** Request 33: whether students see the survey's extra questions. */
-  extraQuestions: boolean;
   /** Request 35: staff removed after 5 wrong IDs, shown to a ceo until cleared. */
   alerts: { at: string; email: string; role: string }[];
   staff: { email: string; role: Role; campus: string | null }[];
   gifts: GiftView[];
   message?: Notice;
 }): string {
-  const { email, role, campus, extraQuestions, alerts, staff, gifts, message } = options;
+  const { email, role, campus, alerts, staff, gifts, message } = options;
   const allCampuses = campus === null; // request 45: no campus means every campus
   const M = T.manager;
   // Request 32: only roles below the viewer's own.
@@ -889,15 +856,6 @@ export function managerPage(options: {
 </form></div>`
     : "";
   const selectionsLink = role === "ceo" ? `<p><a href="/manager/gifts">${M.selections}</a></p>` : "";
-  const extraSwitch = role === "ceo"
-    ? `<section><h2>${M.extraTitle}</h2>
-<p class="${extraQuestions ? "ok" : "warn"}">${extraQuestions ? M.extraIsOn : M.extraIsOff}</p>
-<form method="post" action="/manager/extra-questions">
-  <input type="hidden" name="enabled" value="${extraQuestions ? "0" : "1"}">
-  <button class="button${extraQuestions ? " secondary" : ""}">${extraQuestions ? M.extraTurnOff : M.extraTurnOn}</button>
-</form>
-</section>`
-    : "";
   const downloads = role === "ceo"
     ? `<section><h2>${M.export}</h2>
 <p class="hint">${M.exportHint}</p>
@@ -956,7 +914,6 @@ ${notice(message)}
 <p class="hint">${M.stockHint}</p>
 <table><thead><tr>${(allCampuses ? [M.campus, ...M.stockCols] : M.stockCols).map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
 </section>
-${extraSwitch}
 ${downloads}`,
     true,
   );
