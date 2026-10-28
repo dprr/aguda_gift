@@ -642,6 +642,10 @@ export async function buildApp(options: AppOptions) {
     },
   );
 
+  // A reload of the address the upload posted to lands on the page again.
+  app.get("/manager/students/upload", { preHandler: requireStaff("ceo") }, async (_request, reply) =>
+    reply.redirect("/manager/students"));
+
   app.post("/manager/students/upload", { preHandler: requireStaff("ceo") }, async (request, reply) => {
     const file = await request.file().catch(() => undefined);
     if (!file) return html(reply, await updatesPage(request, { message: updateError("no_file") }));

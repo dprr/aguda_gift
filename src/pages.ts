@@ -204,6 +204,8 @@ export const T = {
     updatesHint: "העלה קובץ JSON מממשק AgudaStudents של האוניברסיטה. לפני העדכון נציג תצוגה מקדימה. סטודנט שאינו ברשימה לא נמחק: החברות שלו באגודה מסתיימת.",
     uploadFile: "קובץ הרשימה (JSON)",
     uploadPreview: "הצג תצוגה מקדימה",
+    uploadWait: "ההעלאה והבדיקה נמשכות עד חצי דקה. לחץ פעם אחת וחכה.",
+    uploading: "מעלה ובודק את הקובץ…",
     previewTitle: "תצוגה מקדימה: עדכון עדיין לא בוצע",
     previewRows: {
       received: "סטודנטים ברשימה",
@@ -825,7 +827,7 @@ export function studentUpdatesPage(options: {
     ? `<div class="card"><h2>${M.previewTitle}</h2>
 <dl>${(Object.keys(M.previewRows) as (keyof typeof M.previewRows)[])
   .map((k) => `<dt>${M.previewRows[k]}</dt><dd>${ltr(preview[k])}</dd>`).join("")}</dl>
-<form method="post" action="/manager/students/apply">
+<form method="post" action="/manager/students/apply" onsubmit="this.querySelector('button').disabled = true;">
   <input type="hidden" name="token" value="${esc(preview.token)}">
   <button class="button">${M.previewApply}</button>
 </form>
@@ -841,8 +843,10 @@ export function studentUpdatesPage(options: {
 ${notice(message)}
 ${previewBox}
 ${preview ? "" : `<p class="hint">${M.updatesHint}</p>
-<form method="post" action="/manager/students/upload" enctype="multipart/form-data">
+<form method="post" action="/manager/students/upload" enctype="multipart/form-data"
+      onsubmit="const b = this.querySelector('button'); b.disabled = true; b.textContent = '${M.uploading}';">
   <label>${M.uploadFile}<input type="file" name="file" accept=".json,application/json" required></label>
+  <p class="hint">${M.uploadWait}</p>
   <button class="button">${M.uploadPreview}</button>
 </form>`}
 <section><h2>${M.historyTitle}</h2>

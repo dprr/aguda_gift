@@ -110,6 +110,14 @@ describe("the update page", () => {
     assert.match(again.body, /תוקף התצוגה המקדימה פג/, "a token works once");
   });
 
+  test("the upload button works once, and a reload of the upload address returns to the page", async () => {
+    const ceo = await login("chief@aguda.org.il");
+    const page = (await app.inject({ url: "/manager/students", cookies: ceo })).body;
+    assert.match(page, /onsubmit="const b = this.querySelector\('button'\); b.disabled = true;/);
+    assert.match(page, /לחץ פעם אחת וחכה/);
+    assert.equal((await app.inject({ url: "/manager/students/upload", cookies: ceo })).headers.location, "/manager/students");
+  });
+
   test("a second upload previews the removed members", async () => {
     const ceo = await login("chief@aguda.org.il");
     await syncStudents({ fetchStudents: async () => [] }, { minStudents: 0 }); // no-op
