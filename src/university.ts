@@ -206,7 +206,7 @@ if (import.meta.main) {
     process.exit(1);
   }
   const source = new UniversityFileSource(path);
-  const result = await syncStudents(source, { minStudents: Number(process.env.SYNC_MIN_STUDENTS ?? 0) });
+  const result = await syncStudents(source, { minStudents: Number(process.env.SYNC_MIN_STUDENTS ?? 0), origin: { source: "file" } });
   console.error(JSON.stringify(result));
   const students = await source.fetchStudents();
   const unmapped = unmappedFaculties(students, await loadFacultyCampus());

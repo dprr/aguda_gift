@@ -14,7 +14,7 @@ export const TEST_CAMPUS = "הר הצופים";
 
 /** Drop everything and start from the migrations, with small stock so tests reach zero. */
 export async function freshDatabase(stock = 10): Promise<void> {
-  await pool.query("DROP TABLE IF EXISTS students, gifts, gift_stock, staff, workers, settings CASCADE");
+  await pool.query("DROP TABLE IF EXISTS students, gifts, gift_stock, staff, workers, settings, student_updates CASCADE");
   await migrate();
   const perCampus = { 1: stock, 2: stock, 3: stock, 4: stock };
   await seedGifts(

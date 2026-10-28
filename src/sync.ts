@@ -11,6 +11,10 @@ export type SyncResult =
       added: number;
       profileChanged: number;
       membershipChanged: number;
+      /** Request 54: members absent from the list, whose membership ended. */
+      removed: number;
+      /** Request 54: non-members on the list again, whose membership came back. */
+      restored: number;
     }
   | { ok: false; reason: "busy" | "too_few" | "invalid"; detail: string };
 
@@ -24,10 +28,13 @@ export type SyncResult =
  *   being a member, and is never deleted. Rejoining the list makes the student a member
  *   again. `membership_history` gains an entry only when `member` changes (request 13).
  * - The minimum size guard stops a cut-off response from ending everyone's membership.
+ * - Request 54: an upload or a file load records itself in student_updates, in the same
+ *   transaction; a scheduled run does so only when it changed something. A dry run
+ *   computes the same result, then rolls everything back.
  */
 export async function syncStudents(
   source: StudentSource,
-  options: { minStudents: number },
+  options: { minStudents: number; dryRun?: boolean; origin?: { source: string; by?: string } },
 ): Promise<SyncResult> {
   // Steps 2 to 4: fetch and validate. Nothing is written yet.
   const received = await source.fetchStudents();
@@ -105,16 +112,32 @@ export async function syncStudents(
                       EXISTS (SELECT 1 FROM incoming i WHERE i.national_id = s2.national_id) AS on_list
                  FROM students s2) m
         WHERE s.national_id = m.national_id
-          AND s.member IS DISTINCT FROM m.on_list`,
+          AND s.member IS DISTINCT FROM m.on_list
+        RETURNING m.on_list`,
     );
 
-    return {
+    const result: SyncResult = {
       ok: true,
       received: rows.length,
       added: added.rowCount ?? 0,
       profileChanged: profileChanged.rowCount ?? 0,
       membershipChanged: membershipChanged.rowCount ?? 0,
+      removed: membershipChanged.rows.filter((r) => !r.on_list).length,
+      restored: membershipChanged.rows.filter((r) => r.on_list).length,
     };
+    if (options.dryRun) throw new Rollback<SyncResult>(result);
+
+    // A scheduled run that changed nothing is not worth a line; an upload always is.
+    const source = options.origin?.source ?? "schedule";
+    const changed = result.added + result.removed + result.restored + result.profileChanged > 0;
+    if (source === "schedule" && !changed) return result;
+    await db.query(
+      `INSERT INTO student_updates (source, by_email, received, added, removed, restored, profile_changed)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [source, options.origin?.by ?? null, result.received, result.added,
+        result.removed, result.restored, result.profileChanged],
+    );
+    return result;
   });
 }
 

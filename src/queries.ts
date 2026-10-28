@@ -103,3 +103,20 @@ export async function staffStats(campus: string | null): Promise<StaffStats> {
   const [gifts, names, drift] = await Promise.all([listGifts(campus), giftNames(), counterDrift()]);
   return { gifts, names, drift: drift.filter((d) => campus === null || d.campus === campus) };
 }
+
+/** Request 54: one update of the student list, newest first. */
+export type StudentUpdate = {
+  at: Date;
+  source: string;
+  by_email: string | null;
+  received: number;
+  added: number;
+  removed: number;
+  restored: number;
+  profile_changed: number;
+};
+
+export async function listUpdates(): Promise<StudentUpdate[]> {
+  const r = await pool.query("SELECT * FROM student_updates ORDER BY at DESC, id DESC");
+  return r.rows;
+}

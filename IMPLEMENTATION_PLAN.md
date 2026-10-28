@@ -835,6 +835,7 @@ document is a wish list, and a section in it is not a request.
 | 51 | The survey's special populations are the owner's list of 2026-10-26 (12 categories, with feminine labels); "אחר" opens an optional text box. Survey version 2 |
 | 52 | The survey's social-media question is removed, and with it the media links. Survey version 3 |
 | 53 | The survey's extra questions are removed, with their checkbox and the מנכ"ל's on/off switch. Survey version 4 |
+| 54 | A מנכ"ל uploads an updated student list at `/manager/students`: a preview of the changes first, then apply. The page lists every update with its date and counts (new students, removed students) |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

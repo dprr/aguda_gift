@@ -17,7 +17,7 @@ async function countStudents(): Promise<number> {
 test("a first sync inserts every student", async () => {
   const result = await sync(new FakeSource(fakeStudents(100)));
   assert.deepEqual(result, {
-    ok: true, received: 100, added: 100, profileChanged: 0, membershipChanged: 0,
+    ok: true, received: 100, added: 100, profileChanged: 0, membershipChanged: 0, removed: 0, restored: 0,
   });
   assert.equal(await countStudents(), 100);
 });
@@ -30,7 +30,7 @@ test("a repeated sync of identical data writes nothing", async () => {
   const result = await sync(source);
 
   assert.deepEqual(result, {
-    ok: true, received: 100, added: 0, profileChanged: 0, membershipChanged: 0,
+    ok: true, received: 100, added: 0, profileChanged: 0, membershipChanged: 0, removed: 0, restored: 0,
   });
   // xmin changes whenever PostgreSQL writes a row. Identical xmin proves no row was touched.
   const afterRows = await pool.query("SELECT xmin, * FROM students ORDER BY national_id");

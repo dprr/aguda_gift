@@ -3,12 +3,13 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
+import multipart from "@fastify/multipart";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { decide, type Domains, type Door, findStudentByEmail, type GoogleLogin, googleLogin } from "./auth.ts";
 import { pool } from "./db.ts";
 import { markTaken, resetStudent, selectGift, unmarkTaken } from "./gifts.ts";
-import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, selectionsPage, unmarkConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
-import { findStudent, listGifts, listSelections, staffStats, type StudentView } from "./queries.ts";
+import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, selectionsPage, studentUpdatesPage, unmarkConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
+import { findStudent, listGifts, listSelections, listUpdates, staffStats, type StudentView } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { type Actor, addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock, staffOf } from "./staff.ts";
 import { isCampus } from "./campus.ts";
@@ -16,7 +17,9 @@ import { exportCsv, isExport } from "./export.ts";
 import { clearStaffAlerts, staffAlerts } from "./settings.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
 import { FakeSource, fakeStudents, type StudentSource } from "./source.ts";
-import { UniversitySource } from "./university.ts";
+import { loadFacultyCampus, parseUniversity, type UniversityRecord, UniversitySource } from "./university.ts";
+import { syncStudents } from "./sync.ts";
+import type { SourceStudent } from "./source.ts";
 
 export type Session = { kind: "student"; nationalId: string } | { kind: "staff"; email: string };
 
@@ -33,6 +36,8 @@ export type AppOptions = {
   demo?: boolean;
   /** Request 22. Defaults to the live SURVEY; tests pass their own. */
   survey?: Survey;
+  /** Request 54: an uploaded list with fewer students is refused, as in a sync. */
+  syncMinStudents?: number;
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
   origin: string;
 };
@@ -56,6 +61,8 @@ export async function buildApp(options: AppOptions) {
   });
   await app.register(cookie, { secret: options.sessionSecret });
   await app.register(formbody);
+  // Request 54: a ceo uploads the student list, about 20 MB. One file per request.
+  await app.register(multipart, { limits: { fileSize: 60 * 1024 * 1024, files: 1 } });
 
   // CSRF. The session cookie is SameSite=Lax, so a browser does not send it with a POST
   // from another site. This also refuses a POST whose Origin header names another site,
@@ -613,6 +620,72 @@ export async function buildApp(options: AppOptions) {
     },
   );
 
+  // ---- request 54: a ceo uploads an updated student list ---------------------------------
+  // Upload, then a dry run shows what would change, then the ceo applies it. The checked
+  // list waits in memory for 30 minutes, keyed by a random token, so the 20 MB file is not
+  // sent twice. The same parser and sync as the scheduled run, with the same guards.
+  const PENDING_MS = 30 * 60_000;
+  const pending = new Map<string, { students: SourceStudent[]; by: string; at: number }>();
+  const minStudents = options.syncMinStudents ?? 0;
+  type UpdatesExtra = Partial<Omit<Parameters<typeof studentUpdatesPage>[0], "email" | "history">>;
+  const updatesPage = async (request: FastifyRequest, extra: UpdatesExtra = {}) =>
+    studentUpdatesPage({ email: staffEmail(request), history: await listUpdates(), ...extra });
+  const updateError = (key: keyof typeof T.manager.updateErrors, detail?: string): Notice =>
+    ({ kind: "error", text: detail ? `${T.manager.updateErrors[key]} (${esc(detail)})` : T.manager.updateErrors[key] });
+
+  app.get<{ Querystring: { done?: string } }>(
+    "/manager/students",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const message: Notice | undefined = request.query.done ? { kind: "ok", text: T.manager.updateDone } : undefined;
+      return html(reply, await updatesPage(request, { message }));
+    },
+  );
+
+  app.post("/manager/students/upload", { preHandler: requireStaff("ceo") }, async (request, reply) => {
+    const file = await request.file().catch(() => undefined);
+    if (!file) return html(reply, await updatesPage(request, { message: updateError("no_file") }));
+    let records: UniversityRecord[];
+    try {
+      records = JSON.parse((await file.toBuffer()).toString("utf8"));
+    } catch {
+      return html(reply, await updatesPage(request, { message: updateError("not_json") }));
+    }
+    let students: SourceStudent[];
+    try {
+      students = parseUniversity(records, await loadFacultyCampus());
+    } catch (error) {
+      return html(reply, await updatesPage(request, { message: updateError("invalid", (error as Error).message) }));
+    }
+    const preview = await syncStudents({ fetchStudents: async () => students }, { minStudents, dryRun: true });
+    if (!preview.ok) {
+      return html(reply, await updatesPage(request, { message: updateError(preview.reason, preview.detail) }));
+    }
+    for (const [key, p] of pending) if (Date.now() - p.at > PENDING_MS) pending.delete(key);
+    const token = randomBytes(16).toString("base64url");
+    pending.set(token, { students, by: staffEmail(request), at: Date.now() });
+    return html(reply, await updatesPage(request, { preview: { token, ...preview } }));
+  });
+
+  app.post<{ Body: { token?: string } }>(
+    "/manager/students/apply",
+    { preHandler: requireStaff("ceo") },
+    async (request, reply) => {
+      const token = request.body?.token ?? "";
+      const p = pending.get(token);
+      if (!p || p.by !== staffEmail(request) || Date.now() - p.at > PENDING_MS) {
+        return html(reply, await updatesPage(request, { message: updateError("expired") }));
+      }
+      pending.delete(token);
+      const result = await syncStudents({ fetchStudents: async () => p.students }, {
+        minStudents, origin: { source: "upload", by: staffEmail(request) },
+      });
+      if (!result.ok) return html(reply, await updatesPage(request, { message: updateError(result.reason, result.detail) }));
+      request.log.info({ by: staffEmail(request), added: result.added, removed: result.removed }, "student list uploaded");
+      return reply.redirect("/manager/students?done=1");
+    },
+  );
+
   // Request 35: a ceo clears the alerts they saw.
   app.post<{ Body: { up_to?: string } }>(
     "/manager/alerts/clear",
@@ -668,6 +741,7 @@ if (import.meta.main) {
     demo: process.env.DEMO === "1",
     production: process.env.NODE_ENV === "production",
     origin: new URL(baseUrl).origin,
+    syncMinStudents: Number(process.env.SYNC_MIN_STUDENTS ?? 13000),
   });
 
   const managerCount = await pool.query("SELECT count(*)::int AS n FROM staff WHERE role = 'manager'");

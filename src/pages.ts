@@ -4,7 +4,7 @@
  * English pass edits one object (plan §7). Masculine is the neutral form: see
  * .claude/skills/hebrew-text.
  */
-import type { GiftView, SelectionView, StaffStats, StudentView } from "./queries.ts";
+import type { GiftView, SelectionView, StaffStats, StudentUpdate, StudentView } from "./queries.ts";
 import { AGUDA_LOGO, CAMPUSES, logoOf } from "./campus.ts";
 import { mayManage, type Role } from "./staff.ts";
 import { followKey, type Option, type Question, type Survey } from "./survey.ts";
@@ -198,6 +198,35 @@ export const T = {
     alertRemoved: "הסרנו מרשימת הצוות את",
     alertReason: "אחרי 5 חיפושים ברצף של מספר זהות שאינו קיים.",
     alertsClear: "נקה את ההתראות",
+    /** Request 54: the ceo uploads an updated student list. */
+    updates: "עדכן את רשימת הסטודנטים",
+    updatesTitle: "עדכון רשימת הסטודנטים",
+    updatesHint: "העלה קובץ JSON מממשק AgudaStudents של האוניברסיטה. לפני העדכון נציג תצוגה מקדימה. סטודנט שאינו ברשימה לא נמחק: החברות שלו באגודה מסתיימת.",
+    uploadFile: "קובץ הרשימה (JSON)",
+    uploadPreview: "הצג תצוגה מקדימה",
+    previewTitle: "תצוגה מקדימה: עדכון עדיין לא בוצע",
+    previewRows: {
+      received: "סטודנטים ברשימה",
+      added: "סטודנטים חדשים",
+      removed: "יוסרו מהרשימה (החברות תסתיים)",
+      restored: "יחזרו לרשימה (החברות תחזור)",
+      profileChanged: "סטודנטים שפרטיהם ישתנו",
+    },
+    previewApply: "אשר את העדכון",
+    previewCancel: "בטל",
+    historyTitle: "עדכונים קודמים",
+    historyCols: ["תאריך", "מקור", "על ידי", "סטודנטים ברשימה", "חדשים", "הוסרו", "חזרו"],
+    historyNone: "עדיין לא נרשמו עדכונים.",
+    sources: { upload: "העלאה באתר", file: "קובץ בשרת", schedule: "סנכרון אוטומטי" } as Record<string, string>,
+    updateDone: "עדכנו את רשימת הסטודנטים.",
+    updateErrors: {
+      no_file: "בחר קובץ.",
+      not_json: "הקובץ אינו קובץ JSON תקין של רשימת הסטודנטים. לא עדכנו דבר.",
+      invalid: "הרשימה אינה תקינה, ולכן לא עדכנו דבר.",
+      too_few: "ברשימה יש פחות סטודנטים מהמינימום, ולכן לא עדכנו דבר.",
+      busy: "עדכון אחר רץ עכשיו. נסה שוב בעוד דקה.",
+      expired: "תוקף התצוגה המקדימה פג. העלה את הקובץ שוב.",
+    },
     /** Request 40: the ceo's list of selections, and the reversal of a handout. */
     selections: "הצג את בחירות המתנות",
     selectionsTitle: "בחירות מתנות",
@@ -780,6 +809,51 @@ ${result}
 
 // ---- manager (request 24) ----------------------------------------------------------------
 
+/**
+ * Request 54: the ceo's update page. An upload form, an optional preview of a checked
+ * list with its counts and a confirm button, and the history of every update.
+ */
+export function studentUpdatesPage(options: {
+  email: string;
+  history: StudentUpdate[];
+  preview?: { token: string; received: number; added: number; removed: number; restored: number; profileChanged: number };
+  message?: Notice;
+}): string {
+  const { email, history, preview, message } = options;
+  const M = T.manager;
+  const previewBox = preview
+    ? `<div class="card"><h2>${M.previewTitle}</h2>
+<dl>${(Object.keys(M.previewRows) as (keyof typeof M.previewRows)[])
+  .map((k) => `<dt>${M.previewRows[k]}</dt><dd>${ltr(preview[k])}</dd>`).join("")}</dl>
+<form method="post" action="/manager/students/apply">
+  <input type="hidden" name="token" value="${esc(preview.token)}">
+  <button class="button">${M.previewApply}</button>
+</form>
+<a class="button secondary" href="/manager/students">${M.previewCancel}</a></div>`
+    : "";
+  const rows = history
+    .map((u) => `<tr><td>${when(u.at)}</td><td>${esc(M.sources[u.source] ?? u.source)}</td><td>${u.by_email ? ltr(u.by_email) : "—"}</td>${
+      [u.received, u.added, u.removed, u.restored].map((n) => `<td>${ltr(n)}</td>`).join("")}</tr>`)
+    .join("");
+  return layout(
+    `<div class="bar">${logo(null)}<h1>${M.updatesTitle}</h1><span class="hint">${ltr(email)}</span>${logoutForm()}</div>
+<p><a href="/manager">${M.title}</a></p>
+${notice(message)}
+${previewBox}
+${preview ? "" : `<p class="hint">${M.updatesHint}</p>
+<form method="post" action="/manager/students/upload" enctype="multipart/form-data">
+  <label>${M.uploadFile}<input type="file" name="file" accept=".json,application/json" required></label>
+  <button class="button">${M.uploadPreview}</button>
+</form>`}
+<section><h2>${M.historyTitle}</h2>
+${history.length
+  ? `<table><thead><tr>${M.historyCols.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`
+  : `<p class="hint">${M.historyNone}</p>`}
+</section>`,
+    true,
+  );
+}
+
 /** Request 40: the ceo's list of every gift selection, with a reversal for each handout. */
 export function selectionsPage(options: { email: string; rows: SelectionView[]; message?: Notice }): string {
   const { email, rows, message } = options;
@@ -855,7 +929,9 @@ export function managerPage(options: {
   <button class="button secondary small">${M.alertsClear}</button>
 </form></div>`
     : "";
-  const selectionsLink = role === "ceo" ? `<p><a href="/manager/gifts">${M.selections}</a></p>` : "";
+  const selectionsLink = role === "ceo"
+    ? `<p><a href="/manager/gifts">${M.selections}</a></p>\n<p><a href="/manager/students">${M.updates}</a></p>`
+    : "";
   const downloads = role === "ceo"
     ? `<section><h2>${M.export}</h2>
 <p class="hint">${M.exportHint}</p>
