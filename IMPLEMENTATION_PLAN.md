@@ -834,6 +834,7 @@ document is a wish list, and a section in it is not a request.
 | 50 | On `/manager/gifts`, a מנכ"ל deletes a selection that was not handed over, after a confirm step; the unit returns to the campus stock |
 | 51 | The survey's special populations are the owner's list of 2026-10-26 (12 categories, with feminine labels); "אחר" opens an optional text box. Survey version 2 |
 | 52 | The survey's social-media question is removed, and with it the media links. Survey version 3 |
+| 53 | The survey's extra questions are removed, with their checkbox and the מנכ"ל's on/off switch. Survey version 4 |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 
