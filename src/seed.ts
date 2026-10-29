@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { Campus } from "./campus.ts";
+import type { StockPoint } from "./campus.ts";
 import { pool } from "./db.ts";
 
 /**
@@ -25,11 +25,16 @@ export type Gift = { id: number; name: string; description: string; image?: stri
  * only if it is absent, so a restart never resets a counter, and never overwrites a number
  * a manager changed on the website.
  */
-export const STOCK: Record<Campus, Record<number, number>> = {
+export const STOCK: Record<StockPoint, Record<number, number>> = {
   "הר הצופים": { 1: 705, 2: 958, 3: 684, 4: 782, 5: 743 },
   "גבעת רם": { 1: 482, 2: 655, 3: 468, 4: 535, 5: 508 },
   "עין כרם": { 1: 427, 2: 579, 3: 414, 4: 473, 5: 449 },
   "רחובות": { 1: 190, 2: 258, 3: 184, 4: 210, 5: 200 },
+  // Request 55: the sub-campuses of עין כרם. 0 until the owner sends the numbers; a ceo can
+  // also set them on the manager page.
+  "אסף הרופא": { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  "קפלן": { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  "ריפוי בעיסוק": { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
 };
 
 export async function seedGifts(

@@ -1,5 +1,6 @@
 /** Reads for the two interfaces. Every write lives in gifts.ts and sync.ts. */
 import { pool } from "./db.ts";
+import { pointsOf } from "./campus.ts";
 import { counterDrift } from "./gifts.ts";
 
 export type StudentView = {
@@ -12,6 +13,8 @@ export type StudentView = {
    * this; the full list is not read here, so nothing can use it by mistake (request 43).
    */
   true_campus: string | null;
+  /** Request 55: the stock the student selects from: their sub-campus, or else true_campus. */
+  stock_campus: string | null;
   member: boolean | null;
   member_changed_at: Date | null;
   gift_id: number | null;
@@ -24,7 +27,7 @@ export type StudentView = {
 
 export async function findStudent(nationalId: string): Promise<StudentView | null> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.true_campus, s.member,
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, s.true_campus, s.stock_campus, s.member,
             s.member_changed_at, s.gift_id, g.name AS gift_name, s.gift_taken_at,
             s.interactions, s.survey IS NOT NULL AS survey_submitted
        FROM students s LEFT JOIN gifts g ON g.id = s.gift_id
@@ -41,13 +44,13 @@ export type SelectionView = {
   last_name: string | null;
   gender: string | null;
   gift_name: string;
-  true_campus: string | null;
+  stock_campus: string | null;
   gift_taken_at: Date | null;
 };
 
 export async function listSelections(): Promise<SelectionView[]> {
   const r = await pool.query(
-    `SELECT s.national_id, s.first_name, s.last_name, s.gender, g.name AS gift_name, s.true_campus, s.gift_taken_at
+    `SELECT s.national_id, s.first_name, s.last_name, s.gender, g.name AS gift_name, s.stock_campus, s.gift_taken_at
        FROM students s JOIN gifts g ON g.id = s.gift_id
       ORDER BY s.gift_taken_at DESC NULLS LAST, g.id, s.last_name, s.first_name`,
   );
@@ -71,17 +74,20 @@ export type GiftView = {
   in_box: number;
 };
 
-/** The gifts with their stock on `campus`, or on every campus when `campus` is null. */
-export async function listGifts(campus: string | null): Promise<GiftView[]> {
+/**
+ * The gifts with their stock at the given stock points (campuses and sub-campuses), or at
+ * every point when `points` is null.
+ */
+export async function listGifts(points: string[] | null): Promise<GiftView[]> {
   const r = await pool.query(
     `SELECT g.id, k.campus, g.name, g.description, g.image,
             k.starting_inventory, k.requested_count, k.given_count,
             k.starting_inventory - k.requested_count AS selectable,
             k.starting_inventory - k.given_count     AS in_box
        FROM gifts g JOIN gift_stock k ON k.gift_id = g.id
-      WHERE $1::text IS NULL OR k.campus = $1
+      WHERE $1::text[] IS NULL OR k.campus = ANY($1)
       ORDER BY k.campus, g.id`,
-    [campus],
+    [points],
   );
   return r.rows;
 }
@@ -98,10 +104,11 @@ export type StaffStats = {
   drift: Awaited<ReturnType<typeof counterDrift>>;
 };
 
-/** The stock of one campus, or of every campus for a ceo (campus null). */
+/** The stock a campus's staff see: the campus and its sub-campuses; every point for null. */
 export async function staffStats(campus: string | null): Promise<StaffStats> {
-  const [gifts, names, drift] = await Promise.all([listGifts(campus), giftNames(), counterDrift()]);
-  return { gifts, names, drift: drift.filter((d) => campus === null || d.campus === campus) };
+  const points = campus === null ? null : pointsOf(campus);
+  const [gifts, names, drift] = await Promise.all([listGifts(points), giftNames(), counterDrift()]);
+  return { gifts, names, drift: drift.filter((d) => points === null || points.includes(d.campus)) };
 }
 
 /** Request 54: one update of the student list, newest first. */

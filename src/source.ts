@@ -20,6 +20,8 @@ export type SourceStudent = {
   campuses: string[];
   /** One entry per university record, with its academic fields as the university names them. */
   programs: Record<string, unknown>[];
+  /** Request 55: a sub-campus of the true campus with its own stock, or null. */
+  sub_campus: string | null;
 };
 
 export interface StudentSource {
@@ -36,6 +38,7 @@ export const PROFILE_COLUMNS = [
   ["special_population", "text"],
   ["campuses", "text[]"],
   ["programs", "jsonb"],
+  ["sub_campus", "text"],
 ] as const;
 
 // ---------------------------------------------------------------------------------------
@@ -97,6 +100,7 @@ export function fakeStudents(count: number, seed = 1): SourceStudent[] {
       phone: `05${Math.floor(rand() * 1e8).toString().padStart(8, "0")}`,
       special_population: null,
       campuses: [f.campus],
+      sub_campus: null,
       programs: [{
         faculty: f.faculty,
         motherFacultyName: f.faculty,

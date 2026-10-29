@@ -11,6 +11,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { SUB_CAMPUSES } from "./campus.ts";
 import type { SourceStudent, StudentSource } from "./source.ts";
 
 /** One record, as the service sends it. Only the fields this app reads are typed. */
@@ -80,10 +81,34 @@ export async function loadFacultyCampus(path = FACULTY_CAMPUS_PATH): Promise<Fac
 type FacultyFields = { motherFacultyName?: unknown; faculty?: unknown };
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
+/** Request 39: the records that count: those with a mother faculty, or, if none has one, all. */
+function countedRecords<R extends FacultyFields>(records: R[]): R[] {
+  const withMother = records.filter((r) => text(r.motherFacultyName));
+  return withMother.length ? withMother : records;
+}
+
 /** Request 39: the mother faculties, or, if no record has one, the faculties. */
 export function countedFaculties(records: FacultyFields[]): string[] {
   const mothers = records.map((r) => text(r.motherFacultyName)).filter(Boolean);
   return [...new Set(mothers.length ? mothers : records.map((r) => text(r.faculty)).filter(Boolean))];
+}
+
+/**
+ * Request 55: the sub-campus of a student whose true campus has sub-campuses. The first
+ * counted record, in university order, with a listed track code decides; else a listed
+ * faculty. Null when none matches, or when the true campus is another campus.
+ */
+export function subCampusOf(rs: (FacultyFields & { roadMaps?: unknown })[], trueCampus: string | undefined): string | null {
+  const counted = countedRecords(rs);
+  const subs = (Object.entries(SUB_CAMPUSES) as [string, { parent: string; tracks?: readonly string[]; faculty?: string }][])
+    .filter(([, sub]) => sub.parent === trueCampus);
+  for (const r of counted) {
+    const codes = (Array.isArray(r.roadMaps) ? r.roadMaps : []).map((m) => text((m as { roadMapCode?: unknown }).roadMapCode));
+    const byTrack = subs.find(([, sub]) => sub.tracks?.some((t) => codes.includes(t)));
+    if (byTrack) return byTrack[0];
+  }
+  const faculties = countedFaculties(counted);
+  return subs.find(([, sub]) => sub.faculty && faculties.includes(sub.faculty))?.[0] ?? null;
 }
 
 /**
@@ -137,6 +162,7 @@ export function parseUniversity(records: UniversityRecord[], facultyCampus: Facu
       phone: clean(r.mobile),
       special_population: clean(r.specialPopulationsList),
       campuses: campusesOf(rs, facultyCampus),
+      sub_campus: subCampusOf(rs, campusesOf(rs, facultyCampus)[0]),
       // Sorted, so the same records in another order are not a change.
       programs: rs.map(program).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
     };
@@ -196,10 +222,28 @@ export class UniversityFileSource implements StudentSource {
 // ---- command line -----------------------------------------------------------------------
 //   npm run load-students -- <response.json>
 // Syncs a saved response, the same as a scheduled sync, then prints the problem students.
+//   npm run load-students -- --recompute-sub-campus
+// Request 55: sets every student's sub-campus from the programs already stored, with no
+// file. The stored programs are sorted, not in university order; that matters only for a
+// student with tracks of two sub-campuses, and the next sync sets the true order.
 
 if (import.meta.main) {
   const { pool } = await import("./db.ts");
   const { syncStudents } = await import("./sync.ts");
+  if (process.argv[2] === "--recompute-sub-campus") {
+    const rows = (await pool.query("SELECT national_id, true_campus, programs, sub_campus FROM students")).rows;
+    let changed = 0;
+    for (const r of rows) {
+      const sub = subCampusOf(r.programs, r.true_campus ?? undefined);
+      if (sub !== r.sub_campus) {
+        await pool.query("UPDATE students SET sub_campus = $2 WHERE national_id = $1", [r.national_id, sub]);
+        changed++;
+      }
+    }
+    console.error(`sub-campus set for ${changed} of ${rows.length} students`);
+    await pool.end();
+    process.exit(0);
+  }
   const path = process.argv[2];
   if (!path) {
     console.error("usage: npm run load-students -- <response.json>");

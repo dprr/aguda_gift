@@ -105,11 +105,54 @@ describe("the true campus and the stock of each campus", () => {
     assert.deepEqual(await counterDrift(), []);
   });
 
-  test("the seed holds the owner's stock: 5 gifts on each of the 4 campuses", () => {
-    assert.deepEqual(Object.keys(STOCK).sort(), ["גבעת רם", "הר הצופים", "עין כרם", "רחובות"]);
+  test("the seed holds the owner's stock on the 4 campuses, and 0 on the 3 sub-campuses", () => {
+    assert.deepEqual(Object.keys(STOCK).sort(), ["אסף הרופא", "גבעת רם", "הר הצופים", "עין כרם", "קפלן", "רחובות", "ריפוי בעיסוק"]);
     for (const byGift of Object.values(STOCK)) assert.deepEqual(Object.keys(byGift).map(Number), GIFTS.map((g) => g.id));
     assert.equal(STOCK["הר הצופים"][2], 958);
     assert.equal(STOCK["רחובות"][1], 190);
+    assert.equal(STOCK["קפלן"][1], 0);
+  });
+});
+
+describe("sub-campuses (request 55)", () => {
+  const setSub = (id: string, campus: string, sub: string | null) =>
+    pool.query("UPDATE students SET campuses = $2, sub_campus = $3 WHERE national_id = $1", [id, [campus], sub]);
+
+  test("a sub-campus student selects from the sub-campus stock, and keeps the campus logo", async () => {
+    await setSub(ids[0], "עין כרם", "קפלן");
+    const s = await student(ids[0]);
+    assert.equal(s.true_campus, "עין כרם");
+    assert.equal(s.stock_campus, "קפלן");
+    assert.equal((await selectGift(ids[0], 2)).ok, true);
+    assert.equal((await gift(2, "קפלן")).requested_count, 1);
+    assert.equal((await gift(2, "עין כרם")).requested_count, 0);
+    const page = (await app.inject({ url: "/student", cookies: await login({ kind: "student", national_id: ids[0] }) })).body;
+    assert.match(page, /src="\/img\/ein_karem.jpg"/);
+    assert.equal((await markTaken(ids[0])).ok, true);
+    assert.equal((await gift(2, "קפלן")).given_count, 1);
+    assert.deepEqual(await counterDrift(), []);
+  });
+
+  test("a sold-out sub-campus is sold out even with עין כרם stock", async () => {
+    await setSub(ids[0], "עין כרם", "אסף הרופא");
+    await pool.query("UPDATE gift_stock SET requested_count = starting_inventory WHERE gift_id = 1 AND campus = 'אסף הרופא'");
+    assert.deepEqual(await selectGift(ids[0], 1), { ok: false, reason: "sold_out" });
+  });
+
+  test("עין כרם staff serve sub-campus students and see the 4 stock points", async () => {
+    await setSub(ids[0], "עין כרם", "קפלן");
+    await pool.query("INSERT INTO staff (email, role, campus) VALUES ('ek@aguda.org.il', 'worker', 'עין כרם'), ('ekboss@aguda.org.il', 'manager', 'עין כרם')");
+    const worker = await asStaff("ek@aguda.org.il");
+    assert.match((await lookup(worker, ids[0])).body, /<dt>/, "the student card");
+    const desk = (await app.inject({ url: "/staff", cookies: worker })).body;
+    assert.match(desk, /<th>קמפוס<\/th>/);
+    for (const p of ["עין כרם", "אסף הרופא", "קפלן", "ריפוי בעיסוק"]) assert.match(desk, new RegExp(`<tr><td>${p}</td>`), p);
+    assert.doesNotMatch(desk, /<tr><td>גבעת רם<\/td>/);
+    // The עין כרם manager sets a sub-campus's stock; another campus's manager cannot.
+    await app.inject({ method: "POST", url: "/manager/stock", cookies: await asStaff("ekboss@aguda.org.il"), ...form({ gift_id: "3", campus: "קפלן", starting_inventory: "30" }) });
+    assert.equal((await gift(3, "קפלן")).starting_inventory, 30);
+    await app.inject({ method: "POST", url: "/manager/stock", cookies: await asStaff("harboss@aguda.org.il"), ...form({ gift_id: "3", campus: "קפלן", starting_inventory: "99" }) });
+    assert.equal((await gift(3, "קפלן")).starting_inventory, 30, "not another campus's sub-campus");
   });
 });
 

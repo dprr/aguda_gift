@@ -1,6 +1,6 @@
 import { pool } from "../src/db.ts";
 import { migrate } from "../src/migrate.ts";
-import { CAMPUSES } from "../src/campus.ts";
+import { STOCK_POINTS } from "../src/campus.ts";
 import { seedGifts } from "../src/seed.ts";
 import { fakeStudents, FakeSource } from "../src/source.ts";
 import { syncStudents } from "../src/sync.ts";
@@ -25,7 +25,7 @@ export async function freshDatabase(stock = 10): Promise<void> {
       { id: 3, name: "תיק בד", description: "" },
       { id: 4, name: "בקבוק מים", description: "" },
     ],
-    Object.fromEntries(CAMPUSES.map((c) => [c, perCampus])),
+    Object.fromEntries(STOCK_POINTS.map((c) => [c, perCampus])),
   );
 }
 

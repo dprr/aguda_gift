@@ -99,6 +99,27 @@ test("an unknown faculty gives no campus, and is reported", () => {
   assert.deepEqual(unmappedFaculties(students, MAP), ["פקולטה חדשה"]);
 });
 
+test("sub-campuses of עין כרם: by track code, or by faculty (request 55)", () => {
+  const map: FacultyCampus = new Map([
+    ['ביה"ס לאחיות', "עין כרם"], ['ביה"ס לריפוי בעיסוק', "עין כרם"], ["ביה\"ס לרפואה", "עין כרם"],
+    ["פקולטה למתמטיקה ולמדעי הטבע", "גבעת רם"],
+  ]);
+  const nursing = (id: number, code: string) => record({
+    identityNumber: id, hujiEmail: `n${id}@mail.huji.ac.il`, faculty: 'ביה"ס לאחיות', motherFacultyName: 'ביה"ס לאחיות',
+    roadMaps: [{ roadMapCode: code, roadMapName: "אחיות (סיעוד)" }],
+  });
+  const of = (rs: UniversityRecord[]) => parseUniversity(rs, map)[0];
+  assert.equal(of([nursing(1, "606-5611")]).sub_campus, "אסף הרופא");
+  assert.equal(of([nursing(2, "606-5613")]).sub_campus, "קפלן");
+  assert.equal(of([nursing(3, "606-5606")]).sub_campus, null, "הדסה stays עין כרם");
+  const ot = record({ identityNumber: 4, hujiEmail: "o4@mail.huji.ac.il", faculty: 'ביה"ס לריפוי בעיסוק', motherFacultyName: 'ביה"ס לריפוי בעיסוק' });
+  assert.equal(of([ot]).sub_campus, "ריפוי בעיסוק");
+  assert.deepEqual(of([ot]).campuses, ["עין כרם"], "the campus stays עין כרם");
+  // A listed track counts only when the true campus is עין כרם.
+  const mathFirst = [record({ identityNumber: 5, hujiEmail: "m5@mail.huji.ac.il" }), { ...nursing(5, "606-5611"), hujiEmail: "m5@mail.huji.ac.il" }];
+  assert.equal(of(mathFirst).sub_campus, null);
+});
+
 test("the CSV map is read with quotes, a BOM, and Windows line ends", async () => {
   const path = join(tmpdir(), `faculty-campus-${process.pid}.csv`);
   writeFileSync(path, '\uFEFFפקולטה,קמפוס\r\n"ביה""ס לרפואה",עין כרם\r\n"פקולטה לחקלאות, מזון",רחובות\r\nריקה,\r\n');

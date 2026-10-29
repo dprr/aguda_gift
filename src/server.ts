@@ -12,7 +12,7 @@ import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, typ
 import { findStudent, listGifts, listSelections, listUpdates, staffStats, type StudentView } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { type Actor, addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock, staffOf } from "./staff.ts";
-import { isCampus } from "./campus.ts";
+import { isStockPoint, parentOf, pointsOf } from "./campus.ts";
 import { exportCsv, isExport } from "./export.ts";
 import { clearStaffAlerts, staffAlerts } from "./settings.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
@@ -331,7 +331,7 @@ export async function buildApp(options: AppOptions) {
         message = { kind: "error", text: studentErrorText(error as StudentError, s.gender) };
       }
       // Request 41: only the stock of the student's own campus.
-      return html(reply, studentPage(s, s.true_campus ? await listGifts(s.true_campus) : [], message));
+      return html(reply, studentPage(s, s.stock_campus ? await listGifts([s.stock_campus]) : [], message));
     },
   );
 
@@ -341,7 +341,7 @@ export async function buildApp(options: AppOptions) {
     async (request, reply) => {
       const s = await findStudent(studentId(request));
       if (!s?.survey_submitted) return reply.redirect("/student");
-      const gift = s.true_campus ? (await listGifts(s.true_campus)).find((g) => g.id === Number(request.query.gift)) : undefined;
+      const gift = s.stock_campus ? (await listGifts([s.stock_campus])).find((g) => g.id === Number(request.query.gift)) : undefined;
       if (!gift) return reply.redirect("/student?error=unknown_gift");
       return html(reply, confirmPage(gift, s.gender));
     },
@@ -525,7 +525,7 @@ export async function buildApp(options: AppOptions) {
         alerts: staffRole(request) === "ceo" ? await staffAlerts() : [],
         // Request 41: a manager sees their own campus; a ceo sees every campus.
         staff: await listStaff(scope(request)),
-        gifts: await listGifts(scope(request)),
+        gifts: await listGifts(scope(request) === null ? null : pointsOf(scope(request)!)),
         message,
       }));
     },
@@ -553,10 +553,13 @@ export async function buildApp(options: AppOptions) {
     "/manager/stock",
     { preHandler: requireStaff("manager") },
     async (request, reply) => {
-      // Requests 41 and 45: a one-campus manager sets that campus's stock; anyone with all
-      // campuses names the campus.
-      const campus = actor(request).campus ?? request.body?.campus;
-      if (!isCampus(campus)) return reply.redirect("/manager?error=invalid_campus");
+      // Requests 41, 45, and 55: a one-campus manager sets the stock of that campus and its
+      // sub-campuses; anyone with all campuses names any stock point.
+      // A name outside the manager's campus falls back to the campus itself, as before.
+      const own = actor(request).campus;
+      const asked = request.body?.campus;
+      const campus = own === null ? asked : isStockPoint(asked) && parentOf(asked) === own ? asked : own;
+      if (!isStockPoint(campus)) return reply.redirect("/manager?error=invalid_campus");
       const result = await setStock(Number(request.body?.gift_id), campus, request.body?.starting_inventory ?? "");
       if (result.ok) return reply.redirect("/manager?done=stock");
       return reply.redirect(

@@ -774,6 +774,8 @@ export function staffPage(options: {
   const { email, role, campus, stats, student, searched, message } = options;
   const giftNames = stats.names;
   const allCampuses = campus === null; // request 45: no campus means every campus
+  // Request 55: a campus column whenever the stock has more than one point (sub-campuses).
+  const manyPoints = new Set(stats.gifts.map((g) => g.campus)).size > 1;
 
   const result = student
     ? studentCard(student, giftNames)
@@ -784,7 +786,7 @@ export function staffPage(options: {
   const rows = stats.gifts
     .map(
       (g) =>
-        `<tr>${allCampuses ? `<td>${esc(g.campus)}</td>` : ""}<td>${esc(g.name)}</td>${[g.starting_inventory, g.requested_count, g.given_count, g.selectable, g.in_box]
+        `<tr>${manyPoints ? `<td>${esc(g.campus)}</td>` : ""}<td>${esc(g.name)}</td>${[g.starting_inventory, g.requested_count, g.given_count, g.selectable, g.in_box]
           .map((n) => `<td>${ltr(n)}</td>`)
           .join("")}</tr>`,
     )
@@ -803,7 +805,7 @@ ${drift}
 ${notice(message)}
 ${result}
 <section><h2>${T.staff.stock}</h2>
-<table><thead><tr>${(allCampuses ? [T.staff.campus, ...T.staff.stockCols] : T.staff.stockCols).map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
+<table><thead><tr>${(manyPoints ? [T.staff.campus, ...T.staff.stockCols] : T.staff.stockCols).map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
 </section>`,
     true,
   );
@@ -863,7 +865,7 @@ export function selectionsPage(options: { email: string; rows: SelectionView[]; 
   const { email, rows, message } = options;
   const M = T.manager;
   const body = rows
-    .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${esc(r.true_campus ?? "—")}</td><td>${
+    .map((r) => `<tr><td>${esc(r.first_name)} ${esc(r.last_name)}</td><td>${ltr(r.national_id)}</td><td>${esc(r.gift_name)}</td><td>${esc(r.stock_campus ?? "—")}</td><td>${
       r.gift_taken_at ? `${M.receivedAt} ${when(r.gift_taken_at)}` : M.selected
     }</td><td>${
       // A handed-over gift can be reversed; a selection not handed over can be deleted
@@ -918,6 +920,7 @@ export function managerPage(options: {
 }): string {
   const { email, role, campus, alerts, staff, gifts, message } = options;
   const allCampuses = campus === null; // request 45: no campus means every campus
+  const manyPoints = new Set(gifts.map((g) => g.campus)).size > 1; // request 55
   const M = T.manager;
   // Request 32: only roles below the viewer's own.
   const roleOptions = (["worker", "manager", "ceo"] as const)
@@ -962,7 +965,7 @@ ${(Object.keys(M.exportTables) as (keyof typeof M.exportTables)[])
 
   const stockRows = gifts
     .map(
-      (g) => `<tr>${allCampuses ? `<td>${esc(g.campus)}</td>` : ""}<td>${esc(g.name)}</td><td>${ltr(g.requested_count)}</td><td>${ltr(g.given_count)}</td><td>
+      (g) => `<tr>${manyPoints ? `<td>${esc(g.campus)}</td>` : ""}<td>${esc(g.name)}</td><td>${ltr(g.requested_count)}</td><td>${ltr(g.given_count)}</td><td>
 <form method="post" action="/manager/stock" class="inline">
   <input type="hidden" name="gift_id" value="${g.id}">
   <input type="hidden" name="campus" value="${esc(g.campus)}">
@@ -992,7 +995,7 @@ ${notice(message)}
 </section>
 <section><h2>${M.stock}</h2>
 <p class="hint">${M.stockHint}</p>
-<table><thead><tr>${(allCampuses ? [M.campus, ...M.stockCols] : M.stockCols).map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
+<table><thead><tr>${(manyPoints ? [M.campus, ...M.stockCols] : M.stockCols).map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${stockRows}</tbody></table>
 </section>
 ${downloads}`,
     true,
