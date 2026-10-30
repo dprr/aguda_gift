@@ -351,7 +351,9 @@ function layout(body: string, wide = false, brand = false): string {
   h2 { font-weight: 800; }
   .brand h1 { font-size: 2.6rem; text-align: center; margin-block: 0.5rem 1rem; }
   img.logo { width: 2.75rem; height: 2.75rem; flex: none; }
-  .brand-logo { display: block; width: 4.5rem; height: 4.5rem; margin: 0 auto; }
+  /* The Aguda logo is wide and cream: on a green strip in a header, plain on a green page. */
+  img.logo.aguda { width: auto; height: 2.25rem; background: var(--green); padding: 0.25rem 0.4rem; }
+  .brand-logo { display: block; width: min(16rem, 80%); height: auto; margin: 0 auto; }
   .button, .button:visited { display: block; text-align: center; background: var(--green); color: #fff;
             border: 0; border-radius: 3px; padding: 0.75rem; font: inherit;
             font-weight: 700; text-decoration: none; width: 100%; box-sizing: border-box;
@@ -479,8 +481,10 @@ const registerImage = (gender: string | null) =>
 <a href="/img/how_to_register.jpg" target="_blank"><img class="register" src="/img/how_to_register.jpg" alt="${T.student.registerAlt}"></a>`;
 
 /** The campus's logo in a page header; the Aguda logo for no campus or all campuses. */
-const logo = (campus: string | null | undefined) =>
-  `<img class="logo" src="/img/${logoOf(campus)}" alt="${esc(campus ?? "אגודת הסטודנטים")}">`;
+const logo = (campus: string | null | undefined) => {
+  const file = logoOf(campus);
+  return `<img class="logo${file === AGUDA_LOGO ? " aguda" : ""}" src="/img/${file}" alt="${esc(campus ?? "אגודת הסטודנטים")}">`;
+};
 
 /** An imperative, not a verbal noun: התנתק, not התנתקות. Gendered for a known woman. */
 const logoutForm = (gender: string | null = null) =>

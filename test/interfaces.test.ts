@@ -79,14 +79,13 @@ describe("student page", () => {
 
   test("the logos and the Heebo font are served with their types", async () => {
     for (const [url, type] of [
-      ["/img/aguda_logo.svg", "image/svg+xml"], ["/img/givat_ram.webp", "image/webp"],
+      ["/img/logo.png", "image/png"], ["/img/givat_ram.webp", "image/webp"],
       ["/img/mt_scopus.jpg", "image/jpeg"], ["/fonts/heebo-hebrew.woff2", "font/woff2"],
     ]) {
       const res = await app.inject({ url });
       assert.equal(res.statusCode, 200, url);
       assert.equal(res.headers["content-type"], type, url);
     }
-    assert.equal((await app.inject({ url: "/img/aguda_logo.svg" })).headers["content-security-policy"], "script-src 'none'");
     assert.equal((await app.inject({ url: "/fonts/OFL.txt" })).statusCode, 404, "only font files");
     assert.equal((await app.inject({ url: "/fonts/..%2Fpackage.json" })).statusCode, 404);
   });

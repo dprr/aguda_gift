@@ -8,7 +8,8 @@ export type Campus = (typeof CAMPUSES)[number];
 export const isCampus = (value: unknown): value is Campus => CAMPUSES.includes(value as Campus);
 
 /** The Aguda logo, and each campus's own logo, in img/ (owner's files, 2026-10-25). */
-export const AGUDA_LOGO = "aguda_logo.svg";
+/** The Aguda logo: the full name, in cream, on a transparent background (owner's file, 2026-10-30). */
+export const AGUDA_LOGO = "logo.png";
 export const CAMPUS_LOGO: Record<Campus, string> = {
   "גבעת רם": "givat_ram.webp",
   "הר הצופים": "mt_scopus.jpg",
