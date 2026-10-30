@@ -188,6 +188,8 @@ describe("the live survey", () => {
     assert.match(her, /האם את משרתת מילואים\?/);
     assert.match(him, /האם אתה גר במעונות\?/, "unknown gender is masculine");
     assert.match(him, /האם אתה משרת מילואים\?/);
+    assert.match(her, /האם את שייכת לאחת מהאוכלוסיות הבאות\?/);
+    assert.match(him, /האם אתה שייך לאחת מהאוכלוסיות הבאות\?/);
     for (const html of [her, him]) {
       assert.doesNotMatch(html, /אתם/);
       assert.doesNotMatch(html, /הצג שאלות נוספות|extra_open/, "no extra questions at all");

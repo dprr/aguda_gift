@@ -125,8 +125,8 @@ export const SURVEY: Survey = {
       id: "special",
       kind: "choice",
       dropdown: true,
-      label: "האם אתה מאוכלוסייה מיוחדת?",
-      labelFemale: "האם את מאוכלוסייה מיוחדת?",
+      label: "האם אתה שייך לאחת מהאוכלוסיות הבאות?",
+      labelFemale: "האם את שייכת לאחת מהאוכלוסיות הבאות?",
       required: true,
       options: [
         { value: "yes", label: "כן", follow: { kind: "multi", options: SPECIAL_POPULATIONS, otherText: "other" } },
