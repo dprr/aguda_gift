@@ -43,8 +43,7 @@ beforeEach(async () => {
     ('givat@aguda.org.il', 'worker', 'גבעת רם'),
     ('harboss@aguda.org.il', 'manager', 'הר הצופים'),
     ('allcampus@aguda.org.il', 'worker', NULL),
-    ('allboss@aguda.org.il', 'manager', NULL),
-    ('chief@aguda.org.il', 'ceo', NULL)`);
+    ('allboss@aguda.org.il', 'manager', NULL)`);
   app = await buildApp({
     google: noGoogle,
     sessionSecret: "test-secret-test-secret-test-secret",
@@ -52,6 +51,7 @@ beforeEach(async () => {
     devLogin: true,
     production: false,
     origin: ORIGIN,
+    ceos: ["chief@aguda.org.il"],
   });
 });
 

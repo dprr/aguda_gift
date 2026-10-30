@@ -50,12 +50,12 @@ const tokenOf = (html: string) => /name="token" value="([^"]+)"/.exec(html)?.[1]
 beforeEach(async () => {
   await freshDatabase(5);
   await pool.query(`INSERT INTO staff (email, role, campus) VALUES
-    ('chief@aguda.org.il', 'ceo', NULL), ('chief2@aguda.org.il', 'ceo', NULL),
     ('boss@aguda.org.il', 'manager', NULL), ('dana@aguda.org.il', 'worker', NULL)`);
   app = await buildApp({
     google: noGoogle, sessionSecret: "test-secret-test-secret-test-secret",
     domains: { student: ["mail.huji.ac.il"], staff: ["mail.huji.ac.il", "aguda.org.il"] },
     devLogin: true, production: false, origin: ORIGIN, syncMinStudents: 2,
+    ceos: ["chief@aguda.org.il", "chief2@aguda.org.il"],
   });
 });
 

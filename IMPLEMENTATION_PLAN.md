@@ -837,6 +837,7 @@ document is a wish list, and a section in it is not a request.
 | 53 | The survey's extra questions are removed, with their checkbox and the מנכ"ל's on/off switch. Survey version 4 |
 | 54 | A מנכ"ל uploads an updated student list at `/manager/students`: a preview of the changes first, then apply. The page lists every update with its date and counts (new students, removed students) |
 | 55 | Sub-campuses of עין כרם with their own gift stock: אסף הרופא and קפלן (by track code), and ריפוי בעיסוק (by faculty). Their students keep the עין כרם logo and staff |
+| 56 | The מנכ"לים are a fixed list (`CEO_EMAILS` in `.env`, not in git). Nobody adds or removes a מנכ"ל, on the website or the command line, and the 5-wrong-IDs rule does not remove one |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

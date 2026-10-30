@@ -11,7 +11,7 @@ import { markTaken, resetStudent, selectGift, unmarkTaken } from "./gifts.ts";
 import { confirmPage, demoBanner, esc, isFemale, lapsedText, loginPage, ltr, type ManagerDone, type ManagerError, managerPage, noSelectionText, receivedConfirmPage, resetConfirmPage, selectionsPage, studentUpdatesPage, unmarkConfirmPage, studentErrorText, type Notice, type RefusalReason, type StaffRefusal, staffLoginPage, staffPage, type StudentError, type StudentRefusal, studentPage, surveyPage, T, when } from "./pages.ts";
 import { findStudent, listGifts, listSelections, listUpdates, staffStats, type StudentView } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
-import { type Actor, addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock, staffOf } from "./staff.ts";
+import { type Actor, setCeos, addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock, staffOf } from "./staff.ts";
 import { isStockPoint, parentOf, pointsOf } from "./campus.ts";
 import { exportCsv, isExport } from "./export.ts";
 import { clearStaffAlerts, staffAlerts } from "./settings.ts";
@@ -36,6 +36,8 @@ export type AppOptions = {
   demo?: boolean;
   /** Request 22. Defaults to the live SURVEY; tests pass their own. */
   survey?: Survey;
+  /** Request 56: the fixed ceo emails (CEO_EMAILS). Nobody adds or removes a ceo. */
+  ceos?: string[];
   /** Request 54: an uploaded list with fewer students is refused, as in a sync. */
   syncMinStudents?: number;
   /** This site's origin, for example http://localhost:3000. A POST from any other is refused. */
@@ -50,6 +52,7 @@ const FONT_DIR = join(import.meta.dirname, "..", "fonts");
 
 export async function buildApp(options: AppOptions) {
   const survey = options.survey ?? SURVEY;
+  setCeos(options.ceos ?? []);
   if (options.production && options.devLogin && !options.demo) {
     throw new Error("DEV_LOGIN must be off in production");
   }
@@ -749,6 +752,7 @@ if (import.meta.main) {
     production: process.env.NODE_ENV === "production",
     origin: new URL(baseUrl).origin,
     syncMinStudents: Number(process.env.SYNC_MIN_STUDENTS ?? 13000),
+    ceos: list("CEO_EMAILS", "").filter(Boolean),
   });
 
   const managerCount = await pool.query("SELECT count(*)::int AS n FROM staff WHERE role = 'manager'");

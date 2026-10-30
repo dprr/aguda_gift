@@ -7,8 +7,11 @@
  *   ceo      (מנכ"ל) also add and remove managers, and download the data
  *
  * Request 32: a person adds and removes staff strictly below their own level. So nobody
- * changes a peer or themselves on the website, and only the command line, at the end of
- * this file, adds or removes a ceo.
+ * changes a peer or themselves on the website.
+ *
+ * Request 56: the ceos are a fixed list, CEO_EMAILS in .env, read at start (setCeos). Nobody
+ * adds or removes a ceo, on the website or the command line. A ceo is never a row in
+ * `staff`; if a listed email also has a row, the list wins.
  */
 import { type Campus, isCampus } from "./campus.ts";
 import { pool, Rollback, transaction } from "./db.ts";
@@ -21,12 +24,20 @@ export type StaffMember = { email: string; role: Role; campus: Campus | null };
 /** The person acting, as the session and the staff table give them. */
 export type Actor = StaffMember;
 
+let ceoEmails: string[] = [];
+/** Request 56: set the fixed ceo list, once, at start. */
+export function setCeos(emails: string[]): void {
+  ceoEmails = emails.map((e) => e.trim().toLowerCase()).filter(Boolean);
+}
+export const isCeo = (email: string) => ceoEmails.includes(email.trim().toLowerCase());
+
 /**
  * The role of a staff email now, or null if it is not on the list. The server asks on
  * every staff request, not only at login, so a removed worker loses access on the next
  * click.
  */
 export async function staffOf(email: string): Promise<StaffMember | null> {
+  if (isCeo(email)) return { email: email.toLowerCase(), role: "ceo", campus: null };
   const r = await pool.query("SELECT email, role, campus FROM staff WHERE email = $1", [email.toLowerCase()]);
   return r.rows[0] ?? null;
 }
@@ -41,7 +52,9 @@ export async function roleOf(email: string): Promise<Role | null> {
  */
 export async function listStaff(campus: string | null = null): Promise<StaffMember[]> {
   const r = await pool.query("SELECT email, role, campus FROM staff WHERE $1::text IS NULL OR campus = $1", [campus]);
-  return (r.rows as StaffMember[]).sort((a, b) =>
+  // The fixed ceos belong to no campus, so a one-campus view does not list them.
+  const ceos: StaffMember[] = campus === null ? ceoEmails.map((email) => ({ email, role: "ceo", campus: null })) : [];
+  return [...ceos, ...(r.rows as StaffMember[]).filter((m) => !isCeo(m.email))].sort((a, b) =>
     RANK[b.role] - RANK[a.role] || (a.campus ?? "").localeCompare(b.campus ?? "") || a.email.localeCompare(b.email));
 }
 
@@ -87,6 +100,7 @@ export async function addStaff(
   if (target !== null && !isCampus(target)) return { ok: false, reason: "invalid_campus" };
   const checked = checkEmail(email, staffDomains);
   if (!checked.ok) return checked;
+  if (isCeo(checked.email)) return { ok: false, reason: "higher" };
 
   return transaction(async (db) => {
     const r = await db.query("SELECT role, campus FROM staff WHERE email = $1 FOR UPDATE", [checked.email]);
@@ -113,6 +127,7 @@ export type RemoveStaffResult = { ok: true } | { ok: false; reason: "not_found" 
 export async function removeStaff(email: string, by: Actor): Promise<RemoveStaffResult> {
   const e = email.trim().toLowerCase();
   if (e === by.email.toLowerCase()) return { ok: false, reason: "self" };
+  if (isCeo(e)) return { ok: false, reason: "forbidden" };
   const r = await pool.query(
     `DELETE FROM staff WHERE email = $1
         AND (CASE role WHEN 'worker' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END) < $2
@@ -138,6 +153,8 @@ export type LookupRecord =
  */
 export async function recordLookup(email: string, found: boolean): Promise<LookupRecord> {
   const e = email.toLowerCase();
+  // Request 56: nobody removes a ceo, so the rule does not count a ceo's searches.
+  if (isCeo(e)) return { removed: false, failed: 0 };
   if (found) {
     await pool.query("UPDATE staff SET failed_lookups = 0 WHERE email = $1 AND failed_lookups <> 0", [e]);
     return { removed: false, failed: 0 };
@@ -188,15 +205,15 @@ export async function setStock(giftId: number, campus: string, value: string): P
 // ---- command line -----------------------------------------------------------------------
 //   npm run staff                                list the staff
 //   npm run staff -- manager <email> [campus]    add a manager of a campus (none: all campuses), or set an existing person to it
-//   npm run staff -- ceo <email>                 add a ceo (every campus), or set an existing person to it
-//   npm run staff -- remove <email>              remove anyone
-// On the server: bash /home/opc/aguda/app/deploy/server.sh staff ceo <email>
+//   npm run staff -- remove <email>              remove a manager or a worker
+// The ceos are not here: they are CEO_EMAILS in .env (request 56).
+// On the server: bash /home/opc/aguda/app/deploy/server.sh staff manager <email> [campus]
 
 if (import.meta.main) {
   const [command, email = "", campus] = process.argv.slice(2);
   const domains = (process.env.STAFF_DOMAINS ?? "mail.huji.ac.il,aguda.org.il").split(",").map((d) => d.trim().toLowerCase());
   let code = 0;
-  if (command === "manager" || command === "ceo") {
+  if (command === "manager") {
     const checked = checkEmail(email, domains);
     if (!checked.ok) {
       console.error(`refused: ${checked.reason}. Use an address in ${domains.join(" or ")}`);
@@ -205,7 +222,7 @@ if (import.meta.main) {
       console.error(`refused: the campus must be one of: ${["גבעת רם", "הר הצופים", "עין כרם", "רחובות"].join(" | ")}`);
       code = 1;
     } else {
-      const target = command === "ceo" ? null : (campus ?? null);
+      const target = campus ?? null;
       await pool.query(
         `INSERT INTO staff (email, role, campus) VALUES ($1, $2, $3)
          ON CONFLICT (email) DO UPDATE SET role = excluded.role, campus = excluded.campus`,
@@ -220,7 +237,7 @@ if (import.meta.main) {
   } else if (command === undefined) {
     for (const m of await listStaff()) console.log(`${m.role}\t${m.campus ?? "-"}\t${m.email}`);
   } else {
-    console.error("usage: npm run staff -- [manager <email> [campus] | ceo <email> | remove <email>]");
+    console.error("usage: npm run staff -- [manager <email> [campus] | remove <email>]");
     code = 1;
   }
   await pool.end();
