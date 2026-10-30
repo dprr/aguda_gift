@@ -210,6 +210,7 @@ export async function setStock(giftId: number, campus: string, value: string): P
 // On the server: bash /home/opc/aguda/app/deploy/server.sh staff manager <email> [campus]
 
 if (import.meta.main) {
+  setCeos((process.env.CEO_EMAILS ?? "").split(","));
   const [command, email = "", campus] = process.argv.slice(2);
   const domains = (process.env.STAFF_DOMAINS ?? "mail.huji.ac.il,aguda.org.il").split(",").map((d) => d.trim().toLowerCase());
   let code = 0;
