@@ -4,7 +4,8 @@
 -- run, so the file stays idempotent.
 ALTER TABLE gift_stock DROP CONSTRAINT IF EXISTS gift_stock_campus_check;
 ALTER TABLE gift_stock ADD CONSTRAINT gift_stock_campus_check
-  CHECK (campus IN ('גבעת רם', 'הר הצופים', 'עין כרם', 'רחובות', 'אסף הרופא', 'קפלן', 'ריפוי בעיסוק'));
+  CHECK (campus IN ('גבעת רם', 'הר הצופים', 'עין כרם', 'רחובות', 'אסף הרופא', 'קפלן', 'ריפוי בעיסוק',
+                    'מכון וולקני')); -- request 68: here, as this file runs again on every deploy
 
 -- The student's sub-campus, set by the loader from their tracks or faculty; usually null.
 ALTER TABLE students ADD COLUMN IF NOT EXISTS sub_campus text;

@@ -30,13 +30,13 @@ export async function selectGift(nationalId: string, giftId: number): Promise<Se
       `UPDATE students SET gift_id = $2
         WHERE national_id = $1 AND member IS TRUE AND gift_id IS NULL AND survey IS NOT NULL
           AND stock_campus IS NOT NULL
-          AND (cardinality(campuses) <= 1 OR chosen_campus IS NOT NULL)
+          AND (cardinality(pickup_options(campuses)) <= 1 OR chosen_campus IS NOT NULL)
         RETURNING stock_campus`,
       [nationalId, giftId],
     );
     if (chose.rowCount === 0) {
       const row = await db.query(
-        "SELECT member, gift_id, survey IS NOT NULL AS surveyed, stock_campus, cardinality(campuses) > 1 AND chosen_campus IS NULL AS unchosen FROM students WHERE national_id = $1",
+        "SELECT member, gift_id, survey IS NOT NULL AS surveyed, stock_campus, cardinality(pickup_options(campuses)) > 1 AND chosen_campus IS NULL AS unchosen FROM students WHERE national_id = $1",
         [nationalId],
       );
       const s = row.rows[0];
@@ -72,13 +72,14 @@ export type ChooseCampusResult = { ok: true } | { ok: false; reason: "not_theirs
 
 /**
  * Request 57. A student with several campuses picks where to collect the gift: one of
- * their own campuses, and only while no gift is selected, so a selection never moves to
+ * their own campuses (request 68: or a picked sub-campus of one, pickup_options()), and only while no gift is selected, so a selection never moves to
  * another campus's stock. The rules sit in the WHERE clause.
  */
 export async function chooseCampus(nationalId: string, campus: string): Promise<ChooseCampusResult> {
   const r = await pool.query(
     `UPDATE students SET chosen_campus = $2
-      WHERE national_id = $1 AND gift_id IS NULL AND $2 = ANY(campuses) AND cardinality(campuses) > 1`,
+      WHERE national_id = $1 AND gift_id IS NULL AND $2 = ANY(pickup_options(campuses))
+        AND cardinality(pickup_options(campuses)) > 1`,
     [nationalId, campus],
   );
   if (r.rowCount) return { ok: true };

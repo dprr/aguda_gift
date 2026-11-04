@@ -11,7 +11,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { SUB_CAMPUSES } from "./campus.ts";
+import { pickupOptions, SUB_CAMPUSES } from "./campus.ts";
 import type { SourceStudent, StudentSource } from "./source.ts";
 
 /** One record, as the service sends it. Only the fields this app reads are typed. */
@@ -241,7 +241,7 @@ export async function recomputeCampuses(map?: FacultyCampus): Promise<{ changed:
     if (!computed.length) continue; // no mapped faculty, nothing to compute from
     const campuses = [...r.campuses.filter((c: string) => computed.includes(c)), ...computed.filter((c) => !r.campuses.includes(c))];
     const sub = subCampusOf(r.programs, campuses);
-    const chosen = campuses.includes(r.chosen_campus) ? r.chosen_campus : null;
+    const chosen = pickupOptions(campuses).includes(r.chosen_campus) ? r.chosen_campus : null;
     if (sub !== r.sub_campus || chosen !== r.chosen_campus || JSON.stringify(campuses) !== JSON.stringify(r.campuses)) {
       await pool.query("UPDATE students SET campuses = $2, sub_campus = $3, chosen_campus = $4 WHERE national_id = $1",
         [r.national_id, campuses, sub, chosen]);

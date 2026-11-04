@@ -35,6 +35,7 @@ export const STOCK: Record<StockPoint, Record<number, number>> = {
   "אסף הרופא": { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
   "קפלן": { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
   "ריפוי בעיסוק": { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+  "מכון וולקני": { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
 };
 
 export async function seedGifts(

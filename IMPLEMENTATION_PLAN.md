@@ -852,6 +852,7 @@ document is a wish list, and a section in it is not a request.
 | 65 | ריפוי בעיסוק students belong to עין כרם and הר הצופים; רפואת שיניים students to עין כרם and גבעת רם. They pick where to collect. `faculty-campus.csv` allows several campuses, separated by ";". `--recompute-sub-campus` sets the campuses too |
 | 66 | The party picture (`img/party.webp`, a smaller copy of `party.png`) links to https://go.aguda.org.il/2511-tickets, on the login page and after a selection |
 | 67 | The page after a selection (with "סמן שקיבלת את המתנה") shows the campus in large letters with its logo, like the confirm page |
+| 68 | מכון וולקני: a sub-campus of רחובות (its logo and staff, its own stock, 0 at the start). Every רחובות student picks רחובות or מכון וולקני, and appears in the multi-campus report |
 
 Add a line here when the owner asks for something. Then, and only then, add the table.
 

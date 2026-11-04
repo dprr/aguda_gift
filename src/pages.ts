@@ -5,7 +5,7 @@
  * .claude/skills/hebrew-text.
  */
 import type { GiftView, SelectionView, StaffStats, StudentUpdate, StudentView } from "./queries.ts";
-import { AGUDA_LOGO, CAMPUSES, logoOf } from "./campus.ts";
+import { AGUDA_LOGO, CAMPUSES, logoOf, pickupOptions } from "./campus.ts";
 import { mayManage, type Role } from "./staff.ts";
 import { followKey, type Option, type Question, type Survey } from "./survey.ts";
 
@@ -79,8 +79,9 @@ export const T = {
     yourGift: "המתנה שלך",
     /** Request 57: a student with several campuses picks where to collect the gift. */
     chooseCampusTitle: "בחירת קמפוס",
-    chooseCampus: "אתה לומד ביותר מקמפוס אחד. באיזה קמפוס תרצה לקבל את המתנה?",
-    chooseCampusFemale: "את לומדת ביותר מקמפוס אחד. באיזה קמפוס תרצי לקבל את המתנה?",
+    // Request 68: a רחובות student also picks, so no "you study at more than one campus".
+    chooseCampus: "באיזה קמפוס תרצה לקבל את המתנה?",
+    chooseCampusFemale: "באיזה קמפוס תרצי לקבל את המתנה?",
     chooseCampusHint: "תוכל לשנות את הקמפוס עד שתבחר מתנה.",
     chooseCampusHintFemale: "תוכלי לשנות את הקמפוס עד שתבחרי מתנה.",
     chooseCampusMissing: "בחר קמפוס.",
@@ -621,7 +622,7 @@ ${registerImage(s.gender)}`);
   if (!s.true_campus) return layout(`${head}<p class="warn">${studentErrorText("no_campus", s.gender)}</p>`);
 
   // Request 57: with several campuses, the campus to collect at, and a link to change it.
-  const pickup = s.campuses.length > 1
+  const pickup = pickupOptions(s.campuses).length > 1
     ? `<p>${T.student.pickupCampus} <strong>${esc(s.pickup_campus)}</strong> · <a href="/student/campus">${f ? T.student.changeCampusFemale : T.student.changeCampus}</a></p>`
     : "";
 
@@ -649,7 +650,7 @@ ${pickup}
  */
 export function campusChoicePage(s: StudentView, missing = false): string {
   const f = isFemale(s.gender);
-  const options = s.campuses
+  const options = pickupOptions(s.campuses)
     .map((c) => `<label class="option"><input type="radio" name="campus" value="${esc(c)}"${c === s.chosen_campus ? " checked" : ""}> ${esc(c)}</label>`)
     .join("");
   return layout(`<div class="bar">${logo(s.pickup_campus)}<h1>${T.student.chooseCampusTitle}</h1>${logoutForm(s.gender)}</div>

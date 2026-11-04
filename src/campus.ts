@@ -15,9 +15,14 @@ export const CAMPUS_LOGO: Record<Campus, string> = {
   "עין כרם": "ein_karem.jpg",
   "רחובות": "rechovot.jpg",
 };
-/** A campus's logo, or the Aguda logo for no campus or all campuses. */
-export const logoOf = (campus: string | null | undefined) =>
-  (isCampus(campus) ? CAMPUS_LOGO[campus] : AGUDA_LOGO);
+/**
+ * A campus's logo, or the Aguda logo for no campus or all campuses. A sub-campus has its
+ * parent's logo.
+ */
+export const logoOf = (campus: string | null | undefined) => {
+  const parent = campus ? parentOf(campus) : campus;
+  return isCampus(parent) ? CAMPUS_LOGO[parent] : AGUDA_LOGO;
+};
 
 /**
  * Request 55. Sub-campuses: they belong to a campus (its logo, its staff), but have their
@@ -29,6 +34,8 @@ export const SUB_CAMPUSES = {
   "אסף הרופא": { parent: "עין כרם", tracks: ["606-5611", "606-5615", "608-5608", "622-5622", "606-6608"] },
   "קפלן": { parent: "עין כרם", tracks: ["606-5613", "606-5614", "610-5610", "619-5619"] },
   "ריפוי בעיסוק": { parent: "עין כרם", faculty: 'ביה"ס לריפוי בעיסוק' },
+  // Request 68: no tracks and no faculty. A רחובות student picks it (PICK_SUB_CAMPUSES).
+  "מכון וולקני": { parent: "רחובות" },
 } as const satisfies Record<string, { parent: Campus; tracks?: readonly string[]; faculty?: string }>;
 export type SubCampus = keyof typeof SUB_CAMPUSES;
 
@@ -40,6 +47,19 @@ export const isStockPoint = (value: unknown): value is StockPoint => STOCK_POINT
 /** The campus a stock point belongs to: itself, or a sub-campus's parent. */
 export const parentOf = (point: string): string =>
   (point in SUB_CAMPUSES ? SUB_CAMPUSES[point as SubCampus].parent : point);
+
+/**
+ * Request 68: sub-campuses a student of the parent picks, instead of being placed in by the
+ * loader. 018_volcani.sql repeats the list in pickup_options().
+ */
+export const PICK_SUB_CAMPUSES: SubCampus[] = ["מכון וולקני"];
+
+/**
+ * The places a student can collect at, in this order: each campus, then its picked
+ * sub-campuses. More than one means the student picks one (students.chosen_campus).
+ */
+export const pickupOptions = (campuses: string[]): string[] =>
+  campuses.flatMap((c) => [c, ...PICK_SUB_CAMPUSES.filter((p) => parentOf(p) === c)]);
 
 /** The stock points a campus's staff see: the campus and its sub-campuses. */
 export const pointsOf = (campus: string): string[] => STOCK_POINTS.filter((p) => parentOf(p) === campus);

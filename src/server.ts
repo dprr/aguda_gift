@@ -12,7 +12,7 @@ import { campusChoicePage, confirmPage, demoBanner, resetAllConfirmPage, esc, is
 import { findStudent, listGifts, listSelections, listUpdates, staffStats, type StudentView } from "./queries.ts";
 import { startSyncSchedule } from "./schedule.ts";
 import { type Actor, setCeos, addStaff, listStaff, MAX_FAILED_LOOKUPS, RANK, recordLookup, removeStaff, type Role, roleOf, setStock, staffOf } from "./staff.ts";
-import { isStockPoint, parentOf, pointsOf } from "./campus.ts";
+import { isStockPoint, parentOf, pickupOptions, pointsOf } from "./campus.ts";
 import { exportCsv, isExport } from "./export.ts";
 import { clearStaffAlerts, staffAlerts } from "./settings.ts";
 import { SURVEY, type Survey, submitSurvey, validate } from "./survey.ts";
@@ -325,7 +325,7 @@ export async function buildApp(options: AppOptions) {
       // Request 22: member or not, the survey comes first.
       if (!s.survey_submitted) return html(reply, surveyPage(s, survey));
       // Request 57: with several campuses and no choice yet, the campus comes next.
-      if (s.campuses.length > 1 && !s.chosen_campus && s.gift_id === null && s.member === true) {
+      if (pickupOptions(s.campuses).length > 1 && !s.chosen_campus && s.gift_id === null && s.member === true) {
         return html(reply, campusChoicePage(s));
       }
 
@@ -381,7 +381,7 @@ export async function buildApp(options: AppOptions) {
   // Request 57: pick, or change, the campus to collect the gift at, until a gift is selected.
   app.get("/student/campus", { preHandler: requireStudent }, async (request, reply) => {
     const s = await findStudent(studentId(request));
-    if (!s || !s.survey_submitted || s.campuses.length < 2 || s.gift_id !== null) return reply.redirect("/student");
+    if (!s || !s.survey_submitted || pickupOptions(s.campuses).length < 2 || s.gift_id !== null) return reply.redirect("/student");
     return html(reply, campusChoicePage(s));
   });
 
@@ -430,7 +430,9 @@ export async function buildApp(options: AppOptions) {
    */
   const otherCampus = (request: FastifyRequest, s: StudentView): Notice | null => {
     const mine = scope(request);
-    const theirs = s.pickup_campus; // request 57: the campus where the student collects
+    // Request 57: the campus where the student collects. Request 68: the parent of a
+    // picked sub-campus, whose staff serve it.
+    const theirs = s.pickup_campus && parentOf(s.pickup_campus);
     if (mine === null || theirs === mine) return null;
     if (!theirs) return { kind: "error", text: T.staff.noStudentCampus };
     return { kind: "warn", text: `${isFemale(s.gender) ? T.staff.otherCampusFemale : T.staff.otherCampus} ${esc(theirs)}.` };
